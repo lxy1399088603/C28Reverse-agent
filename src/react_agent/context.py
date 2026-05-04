@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass, field, fields
 from typing import Annotated
 
-from . import prompts
+from react_agent.prompts.system_prompt import SYSTEM_PROMPT
 
 # 上下文定义
 @dataclass(kw_only=True)
@@ -14,7 +14,7 @@ class Context:
     """agent上下文."""
 
     system_prompt: str = field(
-        default=prompts.SYSTEM_PROMPT,
+        default=SYSTEM_PROMPT,
         metadata={
             "description": "系统提示词为agent提供介绍. "
             "该提示为agent设置上下文和行为."

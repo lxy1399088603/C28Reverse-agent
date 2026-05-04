@@ -3,6 +3,16 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from pathlib import Path
 from typing import Literal
+from react_agent.state import State
+
+
+def latest_human_text(state: State) -> str:
+    """Return the latest human message text from LangGraph state."""
+
+    for message in reversed(state.messages):
+        if getattr(message, "type", None) == "human":
+            return get_message_text(message)
+    return ""
 
 
 def get_message_text(msg: BaseMessage) -> str:
