@@ -9,6 +9,38 @@ from langchain_core.messages import AIMessage
 from react_agent.state import State
 
 
+def route_from_session_entry(
+    state: State,
+) -> Literal[
+    "task_intake_node",
+    "target_intake_node",
+    "path_intake_node",
+    "check_mcp_node",
+    "call_model",
+]:
+    """Route a restored thread to the right phase instead of restarting intake.
+
+    missing_requirements 是 human loop 留下来的“补什么”信号。resume 后入口
+    根据它把用户补充内容送到对应节点，而不是重新跑完整模式识别。
+    """
+
+    missing = set(state.missing_requirements)
+
+    if missing & {"function_target", "function_names", "entry_points", "function_queue"}:
+        return "target_intake_node"
+
+    if missing & {"asm_source", "authorized_path", "path_candidates", "workspace_path"}:
+        return "path_intake_node"
+
+    if missing & {"mcp_connection", "mcp_tools"}:
+        return "check_mcp_node"
+
+    if state.initialization_complete:
+        return "call_model"
+
+    return "task_intake_node"
+
+
 def route_after_paths(
     state: State,
 ) -> Literal["ask_missing_info_node", "check_mcp_node"]:

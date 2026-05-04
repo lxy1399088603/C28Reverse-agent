@@ -65,9 +65,15 @@ def validate_paths_node(state: State) -> dict[str, Any]:
 
     result = validate_path_candidates(state.path_candidates)
 
+    # 普通 State 字段是覆盖式更新。这里不要用空列表清掉旧的可信路径；
+    # 只有本轮确实校验出新路径时才替换，否则保留上一轮已经验证过的路径。
+    authorized_paths = result.authorized_paths or state.authorized_paths
+    source_files = result.source_files or state.source_files
+
     update: dict[str, Any] = {
-        "authorized_paths": result.authorized_paths,
-        "source_files": result.source_files,
+        "authorized_paths": authorized_paths,
+        "source_files": source_files,
+        "paths_locked": bool(authorized_paths or source_files),
         "needs_user_input": False,
         "blocking_reason": None,
         "missing_requirements": [],
@@ -75,18 +81,21 @@ def validate_paths_node(state: State) -> dict[str, Any]:
 
     # asm_files 模式必须有本地文件或目录作为信息来源。
     if state.source_mode == "asm_files":
-        if not result.source_files and not result.authorized_paths:
+        if not source_files and not authorized_paths:
             update.update(
                 {
+                    "session_phase": "blocked",
                     "needs_user_input": True,
                     "blocking_reason": "asm_files 模式需要提供存在的 asm/lst/disasm 文件或目录。",
                     "missing_requirements": ["asm_source"],
+                    "last_blocking_node": "validate_paths_node",
                 }
             )
         return update
 
     # 如果用户没有明确来源，但提供了本地文件，则自动采用 asm_files 模式。
-    if state.source_mode == "unknown" and result.source_files:
+    if state.source_mode == "unknown" and source_files:
         update["source_mode"] = "asm_files"
+        update["source_locked"] = True
 
     return update

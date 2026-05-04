@@ -7,6 +7,7 @@ Run with:
 from __future__ import annotations
 
 import argparse
+import time
 import traceback
 import uuid
 from datetime import datetime
@@ -62,6 +63,14 @@ class AgentTui(App[None]):
         padding: 0 1;
     }
 
+    #streaming {
+        height: auto;
+        max-height: 35%;
+        border: solid $primary;
+        padding: 0 1;
+        display: none;
+    }
+
     #input-row {
         height: 3;
         padding: 0 1;
@@ -87,6 +96,11 @@ class AgentTui(App[None]):
         self.thread_id = uuid.uuid4().hex
         # 当前正在流式生成的 Assistant 回复缓存。
         self._assistant_buffer = ""
+        # 流式 UI 渲染节流状态。
+        # Agent 可能每个 token 都推送一次消息，如果每次都清屏并重画完整历史，
+        # 长回答会非常卡。这里记录上次刷新时间和长度，只按固定间隔刷新 UI。
+        self._last_stream_render_at = 0.0
+        self._last_stream_render_len = 0
         # UI 聊天记录落盘文件，方便后续复制、追踪和回放。
         self.transcript_path = self._create_transcript_path()
         # 中断等待
@@ -97,6 +111,7 @@ class AgentTui(App[None]):
         yield Header(show_clock=True)
         yield Static("Ready", id="status")
         yield RichLog(id="chat", wrap=True, markup=True, highlight=True)
+        yield Static("", id="streaming", markup=True)
         with Vertical(id="input-row"):
             with Horizontal():
                 yield Input(placeholder="输入问题并按 Enter", id="prompt")
@@ -112,7 +127,10 @@ class AgentTui(App[None]):
         """只清空 UI 展示历史，不清空 LangGraph thread memory。"""
         self.history.clear()
         self._assistant_buffer = ""
+        self._last_stream_render_at = 0.0
+        self._last_stream_render_len = 0
         self.query_one("#chat", RichLog).clear()
+        self._hide_streaming_answer()
         self._render_chat()
         self.query_one("#status", Static).update("UI cleared; thread memory kept")
 
@@ -132,12 +150,12 @@ class AgentTui(App[None]):
         self.history.append(("user", prompt))
         self._append_transcript("User", prompt)
         self._assistant_buffer = ""
+        self._last_stream_render_at = 0.0
+        self._last_stream_render_len = 0
 
         # 立即把用户输入渲染到聊天框，并显示 Agent 正在思考。
-        chat = self.query_one("#chat", RichLog)
-        chat.clear()
         self._render_chat()
-        chat.write("[bold magenta]Agent:[/bold magenta] Thinking...")
+        self._show_streaming_answer("Thinking...")
         self.query_one("#status", Static).update(
             f"Thinking... thread={self.thread_id[:8]}"
         )
@@ -177,6 +195,7 @@ class AgentTui(App[None]):
                         self._assistant_buffer = str(question)
                         self.history.append(("assistant", self._assistant_buffer))
                         self._append_transcript("Agent", self._assistant_buffer)
+                        self._hide_streaming_answer()
                         self._render_chat()
                         self.query_one("#status", Static).update(
                             f"Waiting for user input; thread={self.thread_id[:8]}"
@@ -191,17 +210,21 @@ class AgentTui(App[None]):
                         self._render_streaming_answer()
 
             # 本轮完成后，把最终 Assistant 回复保存到 UI history 和 transcript。
+            self.awaiting_resume = False
             self.history.append(("assistant", self._assistant_buffer))
             self._append_transcript("Agent", self._assistant_buffer)
+            self._hide_streaming_answer()
             self._render_chat()
             self.query_one("#status", Static).update(
                 f"Ready; thread={self.thread_id[:8]}"
             )
         except Exception as exc:
             # 出错时也写入 UI history 和 transcript，方便排查。
+            self.awaiting_resume = False
             error = f"{exc!r}"
             self.history.append(("error", error))
             self._append_transcript("Error", error)
+            self._hide_streaming_answer()
             self._render_chat()
             self.query_one("#status", Static).update("Error")
         finally:
@@ -210,12 +233,41 @@ class AgentTui(App[None]):
             prompt_input.disabled = False
             prompt_input.focus()
 
-    def _render_streaming_answer(self) -> None:
+    def _render_streaming_answer(self, *, force: bool = False) -> None:
         """渲染当前正在流式生成的 Assistant 回复。"""
-        chat = self.query_one("#chat", RichLog)
-        chat.clear()
-        self._render_chat()
-        chat.write(f"[bold magenta]Agent:[/bold magenta] {self._assistant_buffer}")
+
+        now = time.monotonic()
+        new_chars = len(self._assistant_buffer) - self._last_stream_render_len
+
+        # 性能关键点：
+        # 历史消息在 RichLog 中保持稳定，当前回答只更新 #streaming。
+        # 即便如此，超长文本频繁 update 仍然会有成本，所以继续保留时间
+        # 和字符数量双重节流。
+        if not force and now - self._last_stream_render_at < 0.08 and new_chars < 96:
+            return
+
+        self._last_stream_render_at = now
+        self._last_stream_render_len = len(self._assistant_buffer)
+
+        self._show_streaming_answer(self._assistant_buffer)
+
+    def _show_streaming_answer(self, content: str) -> None:
+        """Update only the current streaming answer panel.
+
+        RichLog 只负责已经完成的历史消息；当前回答放在独立 Static 中反复
+        update。这样长答案流式输出时不会清空和重绘整个历史区。
+        """
+
+        streaming = self.query_one("#streaming", Static)
+        streaming.display = True
+        streaming.update(f"[bold magenta]Agent:[/bold magenta] {content}")
+
+    def _hide_streaming_answer(self) -> None:
+        """Hide the temporary streaming panel after the answer is finalized."""
+
+        streaming = self.query_one("#streaming", Static)
+        streaming.update("")
+        streaming.display = False
 
     def _render_chat(self) -> None:
         """渲染 UI 展示历史。

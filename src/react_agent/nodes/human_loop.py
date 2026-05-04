@@ -18,13 +18,16 @@ def execution_prepare_node(state: State) -> dict[str, Any]:
 
     if not state.function_queue:
         return {
+            "session_phase": "blocked",
             "initialization_complete": False,
             "needs_user_input": True,
             "blocking_reason": "函数队列为空，无法开始执行。",
             "missing_requirements": ["function_queue"],
+            "last_blocking_node": "execution_prepare_node",
         }
 
     return {
+        "session_phase": "ready",
         "initialization_complete": True,
         "needs_user_input": False,
         "blocking_reason": None,
@@ -33,7 +36,7 @@ def execution_prepare_node(state: State) -> dict[str, Any]:
 
 def ask_missing_info_node(
     state: State,
-) -> Command[Literal["task_intake_node"]]:
+) -> Command[Literal["session_entry_node"]]:
     """Pause the graph and wait for the user to provide missing information."""
 
     reason = state.blocking_reason or "缺少继续执行所需的信息。"
@@ -44,13 +47,14 @@ def ask_missing_info_node(
         }
     )
 
-    # resume 后把补充内容作为新的 HumanMessage 写入 State，再回到 intake 重新理解。
+    # resume 后把补充内容作为新的 HumanMessage 写入 State，再回到 session_entry_node。
+    # 注意：这里不要清空 missing_requirements / last_blocking_node。
+    # 入口节点需要这些字段判断“用户这句话是在补函数、补路径，还是补 MCP”。
     return Command(
         update={
             "messages": [HumanMessage(content=str(user_input))],
             "needs_user_input": False,
             "blocking_reason": None,
-            "missing_requirements": [],
         },
-        goto="task_intake_node",
+        goto="session_entry_node",
     )

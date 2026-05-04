@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Literal, Sequence
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
@@ -11,6 +11,9 @@ from langgraph.managed import IsLastStep
 from typing_extensions import Annotated
 
 from react_agent.domain.intake import PathCandidate, SourceMode, TaskMode
+
+
+SessionPhase = Literal["new", "initializing", "ready", "blocked", "running", "error"]
 
 
 @dataclass
@@ -52,10 +55,22 @@ class State(InputState):
     source_files: list[PathCandidate] = field(default_factory=list)
     mcp_required: bool = False
     mcp_connect_status: bool = False
+    # 调试字段：记录当前 MCP 连接成功后加载到的工具名。
+    mcp_tool_names: list[str] = field(default_factory=list)
 
     # 第三层初始化：真正执行前的准备结果。
     function_queue: list[str] = field(default_factory=list)
     initialization_complete: bool = False
+
+    # 会话生命周期字段。
+    # thread_id 负责从 checkpointer 恢复 State；这些字段负责告诉入口节点
+    # “当前会话走到哪一步了”，避免每次用户输入都重新做完整初始化。
+    session_phase: SessionPhase = "new"
+    source_locked: bool = False
+    paths_locked: bool = False
+    mcp_locked: bool = False
+    targets_locked: bool = False
+    last_blocking_node: str | None = None
 
     # 人机环路控制字段。7x24 场景下，只在真正缺少必要信息时使用。
     needs_user_input: bool = False

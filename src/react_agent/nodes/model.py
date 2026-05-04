@@ -10,9 +10,8 @@ from langgraph.runtime import Runtime
 
 from react_agent.context import Context
 from react_agent.state import State
-from react_agent.tools import TOOLS
 from react_agent.utils import load_chat_model
-
+from react_agent.tools import load_runtime_tools
 
 def _format_initialization_context(state: State) -> str:
     """Expose trusted initialization facts to the LLM."""
@@ -27,6 +26,7 @@ def _format_initialization_context(state: State) -> str:
             f"source_files: {[item.model_dump() for item in state.source_files]}",
             f"mcp_required: {state.mcp_required}",
             f"mcp_connect_status: {state.mcp_connect_status}",
+            f"mcp_tool_names: {state.mcp_tool_names}",
         ]
     )
 
@@ -36,10 +36,12 @@ async def call_model(
 ) -> Dict[str, List[AIMessage]]:
     """Call the LLM after initialization has prepared a task context."""
 
+    # 绑定工具列表到模型
+    tools = await load_runtime_tools(state, runtime.context)
     model = load_chat_model(
         runtime.context.model,
         base_url=runtime.context.base_url,
-    ).bind_tools(TOOLS)
+    ).bind_tools(tools)
 
     system_message = runtime.context.system_prompt.format(
         system_time=datetime.now(tz=UTC).isoformat()

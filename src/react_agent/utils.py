@@ -59,3 +59,8 @@ def validata_path(path_text: str) -> tuple[str, Literal["file", "directory"]] | 
         return str(path), "directory"
 
     return None
+
+
+# 兼容 true/1/yes/on
+def truthy(value: object) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}

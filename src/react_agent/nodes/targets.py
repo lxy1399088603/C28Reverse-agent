@@ -42,6 +42,39 @@ def build_function_queue(
 
     return "unknown", [], ["function_target"]
 
+
+def _preview_names(names: list[str], limit: int = 8) -> str:
+    """Format a long name list as a compact preview for the UI."""
+
+    if not names:
+        return ""
+
+    preview = ", ".join(names[:limit])
+    remaining = len(names) - limit
+    if remaining > 0:
+        return f"{preview} ... 另有 {remaining} 个"
+    return preview
+
+
+def format_mcp_status_for_user(state: State) -> str:
+    """Return a compact user-facing MCP status block for blocking prompts."""
+
+    if not state.mcp_required:
+        return ""
+
+    if not state.mcp_connect_status:
+        return "初始化状态：\n- MCP：未连接或工具未加载成功\n\n"
+
+    if state.mcp_tool_names:
+        tool_preview = _preview_names(state.mcp_tool_names)
+        return (
+            "初始化状态：\n"
+            f"- MCP：已连接，加载 {len(state.mcp_tool_names)} 个工具\n"
+            f"- 工具示例：{tool_preview}\n\n"
+        )
+
+    return "初始化状态：\n- MCP：已连接\n\n"
+
 def validate_targets_node(state: State) -> dict[str, Any]:
     """Validate function targets and prepare the FIFO function queue."""
 
@@ -52,17 +85,26 @@ def validate_targets_node(state: State) -> dict[str, Any]:
     )
 
     if missing:
+        mcp_status = format_mcp_status_for_user(state)
         return {
             "task_mode": task_mode,
             "function_queue": [],
+            "session_phase": "blocked",
             "needs_user_input": True,
-            "blocking_reason": "缺少需要还原的函数名或入口点。",
+            "blocking_reason": (
+                f"{mcp_status}"
+                "阻塞项：缺少需要还原的函数名或入口点。\n"
+                "请继续输入函数名或入口点，例如：main、sub_1234、0x401000。"
+            ),
             "missing_requirements": missing,
+            "last_blocking_node": "validate_targets_node",
         }
 
     return {
         "task_mode": task_mode,
         "function_queue": function_queue,
+        "targets_locked": True,
+        "session_phase": "initializing",
         "needs_user_input": False,
         "blocking_reason": None,
         "missing_requirements": [],
