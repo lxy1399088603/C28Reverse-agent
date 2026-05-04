@@ -2,6 +2,8 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from pathlib import Path
+from typing import Literal
+
 
 def get_message_text(msg: BaseMessage) -> str:
     """获取消息的文本内容."""
@@ -30,28 +32,20 @@ def load_chat_model(
     return init_chat_model(model, model_provider=provider, **kwargs)
 
 
-# 识别用户路径
-import re
-def scan_pah(text: str) -> str|None:
-    patterns = [
-        r"path\s*=\s*(.+)",
-        r"路径[:：]\s*(.+)",
-        r"工作路径[:：]?\s*(.+)",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text, flags=re.IGNORECASE)
-        if match:
-            return match.group(1).strip().strip('"')
-
-
 # 校验可操作路径
-def validata_path(path_text: str) -> str | None:
+def validata_path(path_text: str) -> tuple[str, Literal["file", "directory"]] | None:
     try:
-        path = Path(path_text).expanduser().resolve()
+        path = Path(path_text.strip().strip('"').strip("'")).expanduser().resolve()
     except OSError:
         return None
+
     if not path.exists():
         return None
-    if not path.is_dir():
-        return None
-    return str(path)
+
+    if path.is_file():
+        return str(path), "file"
+
+    if path.is_dir():
+        return str(path), "directory"
+
+    return None

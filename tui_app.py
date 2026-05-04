@@ -23,7 +23,7 @@ from textual.widgets import Footer, Header, Input, RichLog, Static
 from react_agent import graph
 from react_agent.context import Context
 from react_agent.utils import get_message_text
-
+from langgraph.types import Command
 
 def _assistant_chunk_text(chunk: Any) -> str:
     """从 LangGraph 的流式消息事件中，只提取 Assistant 的文本内容。
@@ -89,6 +89,8 @@ class AgentTui(App[None]):
         self._assistant_buffer = ""
         # UI 聊天记录落盘文件，方便后续复制、追踪和回放。
         self.transcript_path = self._create_transcript_path()
+        # 中断等待
+        self.awaiting_resume = False
 
     def compose(self) -> ComposeResult:
         """声明 Textual 界面结构。"""
@@ -143,6 +145,7 @@ class AgentTui(App[None]):
         # 启动后台异步任务调用 LangGraph Agent。
         self.run_agent(prompt)
 
+
     @work(exclusive=True)
     async def run_agent(self, prompt: str) -> None:
         """运行 LangGraph graph，并把 Assistant 的流式 token 渲染到 UI。"""
@@ -151,20 +154,41 @@ class AgentTui(App[None]):
         config = {"configurable": {"thread_id": self.thread_id}}
 
         try:
-            # 这里只传当前用户输入，而不是传 self.history。
-            # self.history 是 UI 层数据；Agent 记忆由 graph checkpointer 管理。
-            async for item in graph.astream(
-                {"messages": [("user", prompt)]},
+            graph_input = (
+                Command(resume=prompt)
+                if self.awaiting_resume # 流程恢复标识
+                else {"messages": [("user", prompt)]}
+            )
+            async for mode, payload in graph.astream(
+                graph_input,
                 config=config,
                 context=Context(),
-                stream_mode="messages",
+                stream_mode=["messages", "updates"],
             ):
-                # stream_mode="messages" 通常返回 (message_chunk, metadata)。
-                chunk = item[0] if isinstance(item, tuple) else item
-                text = _assistant_chunk_text(chunk)
-                if text:
-                    self._assistant_buffer += text
-                    self._render_streaming_answer()
+                if mode == "updates":
+                    if "__interrupt__" in payload:
+                        interrupt_value = payload["__interrupt__"][0].value
+
+                        question = interrupt_value
+                        if isinstance(interrupt_value, dict):
+                            question = interrupt_value.get("question", str(interrupt_value))
+
+                        self.awaiting_resume = True
+                        self._assistant_buffer = str(question)
+                        self.history.append(("assistant", self._assistant_buffer))
+                        self._append_transcript("Agent", self._assistant_buffer)
+                        self._render_chat()
+                        self.query_one("#status", Static).update(
+                            f"Waiting for user input; thread={self.thread_id[:8]}"
+                        )
+                        return
+
+                elif mode == "messages":
+                    chunk = payload[0] if isinstance(payload, tuple) else payload
+                    text = _assistant_chunk_text(chunk)
+                    if text:
+                        self._assistant_buffer += text
+                        self._render_streaming_answer()
 
             # 本轮完成后，把最终 Assistant 回复保存到 UI history 和 transcript。
             self.history.append(("assistant", self._assistant_buffer))

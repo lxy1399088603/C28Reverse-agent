@@ -3,86 +3,115 @@
 Works with a chat model with tool calling support.
 """
 
-from utils import scan_pah, validata_path
 from datetime import UTC, datetime
-from typing import Dict, List, Literal, cast
+from typing import Dict, List, Literal, cast, Any
 
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.runtime import Runtime
+from langgraph.types import Command, interrupt
+from langchain_core.messages import HumanMessage
 
 from react_agent.context import Context
-from react_agent.state import InputState, State
+from react_agent.state import InputState, State, PathCandidate
 from react_agent.tools import TOOLS
-from react_agent.utils import load_chat_model
+from react_agent.utils import load_chat_model, get_message_text, validata_path
+from react_agent.path_auth import PATH_INFERENCE_PROMPT, PathCandidates
 
 
-def validate_authorized_path_node(state: State) -> dict:
-    if state.authorized_path:
+async def validate_path_node(
+        state: State,
+        runtime: Runtime[Context],
+) -> dict[str, Any]:
+    if state.authorized_paths:
         return {
             "needs_user_input": False,
-            "blocking_reason": None
+            "blocking_reason": None,
         }
     last_user_text = ""
     for message in reversed(state.messages):
         if getattr(message, "type", None) == "human":
-            last_user_text = str(message.content)
+            last_user_text = get_message_text(message)
             break
-    lock_path_tmp = scan_pah(last_user_text)
-    if lock_path_tmp is None:
+
+    if not last_user_text.strip():
         return {
             "needs_user_input": True,
-            "blocking_reason": "未提供可操作工作路径。",
-            "messages": [
-                AIMessage(
-                    content=(
-                        "未检测到可操作工作路径。请提供一个已存在的目录，例如：\n"
-                        "`工作路径: D:\\workEnvironment\\reverse\\project1`"
-                    )
-                )
-            ],
+            "blocking_reason": "用户没有提供路径或文件。",
         }
     
-    lock_path = validata_path(lock_path_tmp)
-    if lock_path is None:
+    model = load_chat_model(
+        runtime.context.model,
+        base_url=runtime.context.base_url,
+    )
+    extractor = PATH_INFERENCE_PROMPT | model.with_structured_output(PathCandidates)
+    inference = await extractor.ainvoke({"user_input": last_user_text})
+    if not inference.candidates:
         return {
             "needs_user_input": True,
-            "blocking_reason": f"路径不存在或不是目录: {lock_path_tmp}",
-            "messages": [
-                AIMessage(
-                    content=(
-                        f"路径不存在或不是目录：`{lock_path_tmp}`。\n"
-                        "请提供一个已存在的工作目录。"
-                    )
-                )
-            ],
+            "blocking_reason": "未识别到可操作路径或文件。",
+        }
+    valid_candidates: list[PathCandidate] = []
+    invalid_paths: list[str] = []
+
+    for candidate in inference.candidates:
+        checked = validata_path(candidate.path)
+
+        if checked is None:
+            invalid_paths.append(candidate.path)
+            continue
+
+        resolved_path, path_type = checked
+
+        valid_candidates.append(
+            PathCandidate(
+                path=resolved_path,
+                type=path_type,
+                role=candidate.role,
+            )
+        )
+
+    if not valid_candidates:
+        return {
+            "authorized_paths": [],
+            "needs_user_input": True,
+            "blocking_reason": f"识别到路径，但都不存在或不可访问: {invalid_paths}",
         }
 
     return {
-        "authorized_path": lock_path,
+        "authorized_paths": valid_candidates,
         "needs_user_input": False,
         "blocking_reason": None,
     }
-    
+
+
+def user_input_path_node(state: State) -> Command[Literal["validate_path_node","__end__"]]:
+    user_input = interrupt(
+        {
+            "question": "请提供至少一个已经存在的可操作目录或文件路径。",
+        }
+    )
+
+    if user_input is None:
+        return "__end__"
+
+    return Command(
+        update={
+            "messages": [HumanMessage(content=str(user_input))],
+            "needs_user_input": False,
+            "blocking_reason": None,
+        },
+        goto="validate_path_node",
+    )
 
 
 # 调用模型
 async def call_model(
     state: State, runtime: Runtime[Context]
 ) -> Dict[str, List[AIMessage]]:
-    """调用LLM.
-
-    该函数负责准备提示词、初始化模型并处理响应
-
-    Args:
-        state (State): 对话状态，短期记忆.
-        config (RunnableConfig): 模型运行配置.
-
-    Returns:
-        dict: 包含模型响应消息的字典.
-    """
+   
     # 初始化模型并绑定工具.
     model = load_chat_model(
         runtime.context.model,
@@ -118,23 +147,13 @@ async def call_model(
 
 
 # 路径判断路由
-def route_after_path_validation(state: State) -> Literal["__end__", "call_model"]:
+def route_after_path_validation(state: State) -> Literal["user_input_path_node", "call_model"]:
     if state.needs_user_input:
-        return "__end__"
+        return "user_input_path_node"
     return "call_model"
 
 
 def route_model_output(state: State) -> Literal["__end__", "tools"]:
-    """根据模型的输出确定下一个节点.
-
-    这个方法用来检测模型的最后一条消息是否包含工具调用。
-
-    Args:
-        state (State): 对话的当前状态。
-
-    Returns:
-        str: 下一个调用节点的名字 ("__end__" or "tools").
-    """
     last_message = state.messages[-1]
     if not isinstance(last_message, AIMessage):
         raise ValueError(
@@ -150,13 +169,14 @@ def route_model_output(state: State) -> Literal["__end__", "tools"]:
 # 定义一个图
 builder = StateGraph(State, input_schema=InputState, context_schema=Context)
 
-builder.add_node("validate_authorized_path_node", validate_authorized_path_node)
+builder.add_node("validate_path_node", validate_path_node)
+builder.add_node("user_input_path_node", user_input_path_node)
 builder.add_node(call_model)
 builder.add_node("tools", ToolNode(TOOLS))
 
-builder.add_edge("__start__", "validate_authorized_path_node")
+builder.add_edge("__start__", "validate_path_node")
 builder.add_conditional_edges(
-    "validate_authorized_path",
+    "validate_path_node",
     route_after_path_validation,
 )
 # 添加一个条件边来确定`call_model`节点的下一步
