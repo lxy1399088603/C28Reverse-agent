@@ -96,6 +96,7 @@ async def target_intake_node(
     model = load_chat_model(
         runtime.context.model,
         base_url=runtime.context.base_url,
+        api_key=runtime.context.api_key,
     )
 
     try:
@@ -139,6 +140,7 @@ async def path_intake_node(
     model = load_chat_model(
         runtime.context.model,
         base_url=runtime.context.base_url,
+        api_key=runtime.context.api_key,
     )
 
     try:
@@ -181,6 +183,7 @@ async def task_intake_node(
     model = load_chat_model(
         runtime.context.model,
         base_url=runtime.context.base_url,
+        api_key=runtime.context.api_key,
     )
 
     try:

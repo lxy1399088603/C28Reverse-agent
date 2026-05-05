@@ -62,38 +62,92 @@ class AgentTui(App[None]):
     根据 thread_id 管理。
     """
 
+    TITLE = "C28x Reverse Agent"
+    SUB_TITLE = "Textual Console"
+
     # Textual 的 CSS 样式：整体垂直布局，上方状态栏，中间聊天区，下方输入区。
     CSS = """
     Screen {
         layout: vertical;
+        background: #14161a;
+    }
+
+    Header {
+        background: #1a222b;
+        color: #d7dde4;
+    }
+
+    #status-row {
+        height: 3;
+        padding: 0 1;
+        background: #181d23;
+        border-bottom: solid #2d3742;
+        layout: horizontal;
     }
 
     #status {
-        height: 1;
-        padding: 0 1;
-        color: $text-muted;
+        width: 1fr;
+        content-align: left middle;
+        color: #b9c3cf;
+    }
+
+    #meta {
+        width: 52;
+        content-align: right middle;
+        color: #7f8b99;
     }
 
     #chat {
         height: 1fr;
-        border: solid $accent;
-        padding: 0 1;
+        border: round #3a4755;
+        background: #171a1f;
+        color: #d9dee5;
+        padding: 1 1;
+        margin: 1 1 0 1;
     }
 
     #streaming {
-        height: 35%;
-        max-height: 35%;
-        border: solid $primary;
+        height: 12;
+        min-height: 6;
+        max-height: 16;
+        border: round #275d8f;
+        background: #12171d;
+        color: #d8e6f5;
+        margin: 1 1 0 1;
         display: none;
     }
 
     #input-row {
-        height: 3;
+        height: 7;
+        padding: 0 1 1 1;
+        margin-top: 1;
+    }
+
+    #input-panel {
+        border: round #2f80d1;
+        background: #1a1f26;
         padding: 0 1;
+        height: 3;
+        content-align: center middle;
     }
 
     #prompt {
         width: 1fr;
+        border: none;
+        background: transparent;
+        color: #eef3f8;
+    }
+
+    #input-help {
+        height: 2;
+        padding: 0 1;
+        color: #7f8b99;
+        content-align: left middle;
+    }
+
+    Footer {
+        background: #182029;
+        color: #d1d8e0;
     }
     """
 
@@ -125,7 +179,9 @@ class AgentTui(App[None]):
     def compose(self) -> ComposeResult:
         """声明 Textual 界面结构。"""
         yield Header(show_clock=True)
-        yield Static("Ready", id="status")
+        with Horizontal(id="status-row"):
+            yield Static("Ready", id="status")
+            yield Static("", id="meta")
         yield RichLog(id="chat", wrap=True, markup=True, highlight=True)
         yield TextArea(
             "",
@@ -136,14 +192,18 @@ class AgentTui(App[None]):
             show_cursor=False,
         )
         with Vertical(id="input-row"):
-            with Horizontal():
+            with Horizontal(id="input-panel"):
                 yield Input(placeholder="输入问题并按 Enter", id="prompt")
+            yield Static("", id="input-help")
         yield Footer()
 
     def on_mount(self) -> None:
         """Textual 应用挂载完成后执行。"""
         # 启动后让输入框自动获得焦点，用户可以直接打字。
         self.query_one("#prompt", Input).focus()
+        self.query_one("#chat", RichLog).border_title = " Conversation "
+        self.query_one("#streaming", TextArea).border_title = " Live Output "
+        self._refresh_meta()
         self._render_chat()
 
     def action_clear_chat(self) -> None:
@@ -156,6 +216,7 @@ class AgentTui(App[None]):
         self._hide_streaming_answer()
         self._render_chat()
         self.query_one("#status", Static).update("UI cleared; thread memory kept")
+        self._refresh_meta()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """用户在输入框按 Enter 后触发。"""
@@ -182,6 +243,7 @@ class AgentTui(App[None]):
         self.query_one("#status", Static).update(
             f"Thinking... thread={self.thread_id[:8]}"
         )
+        self._refresh_meta()
 
         # 启动后台异步任务调用 LangGraph Agent。
         self.run_agent(prompt)
@@ -223,6 +285,7 @@ class AgentTui(App[None]):
                         self.query_one("#status", Static).update(
                             f"Waiting for user input; thread={self.thread_id[:8]}"
                         )
+                        self._refresh_meta()
                         return
 
                 elif mode == "messages":
@@ -242,6 +305,7 @@ class AgentTui(App[None]):
             self.query_one("#status", Static).update(
                 f"Ready; thread={self.thread_id[:8]}"
             )
+            self._refresh_meta()
         except Exception as exc:
             # 出错时也写入 UI history 和 transcript，方便排查。
             self.awaiting_resume = False
@@ -251,6 +315,7 @@ class AgentTui(App[None]):
             self._hide_streaming_answer()
             self._render_chat()
             self.query_one("#status", Static).update("Error")
+            self._refresh_meta()
         finally:
             # 无论成功还是失败，都恢复输入框。
             prompt_input = self.query_one("#prompt", Input)
@@ -311,6 +376,20 @@ class AgentTui(App[None]):
         streaming.load_text("")
         streaming.display = False
 
+    def _refresh_meta(self) -> None:
+        """Render compact session metadata outside the main chat area."""
+
+        # 运行信息和快捷提示放在固定区域里，避免挤占主聊天区内容。
+        runtime_context = Context()
+        transcript_name = self.transcript_path.name
+        model_name = runtime_context.model.split("/", maxsplit=1)[-1]
+        self.query_one("#meta", Static).update(
+            f"thread {self.thread_id[:8]}  |  log {transcript_name}"
+        )
+        self.query_one("#input-help", Static).update(
+            f"profile {runtime_context.llm_profile}  |  model {model_name}  |  Enter 发送  |  Ctrl+L 清空 UI  |  Ctrl+C 退出"
+        )
+
     def _render_chat(self) -> None:
         """渲染 UI 展示历史。
 
@@ -320,10 +399,9 @@ class AgentTui(App[None]):
         chat.clear()
         if not self.history:
             chat.write(
-                "[bold green]C28x Agent[/bold green]\n"
-                "按 Enter 发送，Ctrl+L 清空界面，Ctrl+C 退出\n"
-                f"Thread: {self.thread_id}\n"
-                f"Transcript: {self.transcript_path}"
+                "[bold #9FE870]C28x Reverse Agent[/bold #9FE870]\n"
+                "[#9aa7b4]在下方输入任务描述、函数名、入口点或路径，当前 thread 的短期记忆会持续保留在会话里。[/#9aa7b4]\n"
+                "[#6f7c8a]支持从 MCP、ASM 文件或直接函数还原这几类流程开始。[/#6f7c8a]"
             )
             return
 

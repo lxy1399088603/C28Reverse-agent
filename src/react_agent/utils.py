@@ -8,8 +8,6 @@ from react_agent.state import State
 
 # 获取用户最后一条用户信息
 def latest_human_text(state: State) -> str:
-    """Return the latest human message text from LangGraph state."""
-
     for message in reversed(state.messages):
         if getattr(message, "type", None) == "human":
             return get_message_text(message)
@@ -29,13 +27,17 @@ def get_message_text(msg: BaseMessage) -> str:
 
 # 通过模型名加载模型
 def load_chat_model(
-    fully_specified_name: str, base_url: str | None = None
+    fully_specified_name: str,
+    base_url: str | None = None,
+    api_key: str | None = None,
 ) -> BaseChatModel:
 
     provider, model = fully_specified_name.split("/", maxsplit=1)
     kwargs = {}
     if base_url:
         kwargs["base_url"] = base_url
+    if api_key:
+        kwargs["api_key"] = api_key
     return init_chat_model(model, model_provider=provider, **kwargs)
 
 

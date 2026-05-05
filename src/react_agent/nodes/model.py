@@ -41,6 +41,7 @@ async def call_model(
     model = load_chat_model(
         runtime.context.model,
         base_url=runtime.context.base_url,
+        api_key=runtime.context.api_key,
     ).bind_tools(tools)
 
     system_message = runtime.context.system_prompt.format(
