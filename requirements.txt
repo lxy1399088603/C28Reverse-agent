@@ -1,0 +1,9 @@
+langgraph>=1.0.0
+langchain-openai>=0.1.22
+langchain-anthropic>=0.1.23
+langchain>=0.2.14
+langchain-fireworks>=0.1.7
+python-dotenv>=1.0.1
+langchain-tavily>=0.1
+langchain-mcp-adapters>=0.1.0
+textual>=0.89.0

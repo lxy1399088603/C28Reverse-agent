@@ -1,92 +1,168 @@
-# LangGraph ReAct Agent Template
+# C28x Reverse Agent
 
-[![CI](https://github.com/langchain-ai/react-agent/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/langchain-ai/react-agent/actions/workflows/unit-tests.yml)
-[![Open in - LangGraph Studio](https://img.shields.io/badge/Open_in-LangGraph_Studio-00324d.svg?logo=data:image/svg%2bxml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4NS4zMzMiIGhlaWdodD0iODUuMzMzIiB2ZXJzaW9uPSIxLjAiIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHBhdGggZD0iTTEzIDcuOGMtNi4zIDMuMS03LjEgNi4zLTYuOCAyNS43LjQgMjQuNi4zIDI0LjUgMjUuOSAyNC41QzU3LjUgNTggNTggNTcuNSA1OCAzMi4zIDU4IDcuMyA1Ni43IDYgMzIgNmMtMTIuOCAwLTE2LjEuMy0xOSAxLjhtMzcuNiAxNi42YzIuOCAyLjggMy40IDQuMiAzLjQgNy42cy0uNiA0LjgtMy40IDcuNkw0Ny4yIDQzSDE2LjhsLTMuNC0zLjRjLTQuOC00LjgtNC44LTEwLjQgMC0xNS4ybDMuNC0zLjRoMzAuNHoiLz48cGF0aCBkPSJNMTguOSAyNS42Yy0xLjEgMS4zLTEgMS43LjQgMi41LjkuNiAxLjcgMS44IDEuNyAyLjcgMCAxIC43IDIuOCAxLjYgNC4xIDEuNCAxLjkgMS40IDIuNS4zIDMuMi0xIC42LS42LjkgMS40LjkgMS41IDAgMi43LS41IDIuNy0xIDAtLjYgMS4xLS44IDIuNi0uNGwyLjYuNy0xLjgtMi45Yy01LjktOS4zLTkuNC0xMi4zLTExLjUtOS44TTM5IDI2YzAgMS4xLS45IDIuNS0yIDMuMi0yLjQgMS41LTIuNiAzLjQtLjUgNC4yLjguMyAyIDEuNyAyLjUgMy4xLjYgMS41IDEuNCAyLjMgMiAyIDEuNS0uOSAxLjItMy41LS40LTMuNS0yLjEgMC0yLjgtMi44LS44LTMuMyAxLjYtLjQgMS42LS41IDAtLjYtMS4xLS4xLTEuNS0uNi0xLjItMS42LjctMS43IDMuMy0yLjEgMy41LS41LjEuNS4yIDEuNi4zIDIuMiAwIC43LjkgMS40IDEuOSAxLjYgMi4xLjQgMi4zLTIuMy4yLTMuMi0uOC0uMy0yLTEuNy0yLjUtMy4xLTEuMS0zLTMtMy4zLTMtLjUiLz48L3N2Zz4=)](https://langgraph-studio.vercel.app/templates/open?githubUrl=https://github.com/langchain-ai/react-agent)
+`C28x Reverse Agent` 是一个面向 **TI C28x / C2000** 逆向分析场景的本地 Agent 项目。  
+它基于 **LangGraph** 编排流程，通过 **Textual TUI** 提供本地交互界面，支持使用 **IDA Pro MCP** 或本地导出的汇编 / listing / 文本材料作为输入来源，对指定函数或入口调用链进行还原，并在授权范围内操作本地文件。
 
-This template showcases a [ReAct agent](https://arxiv.org/abs/2210.03629) implemented using [LangGraph](https://github.com/langchain-ai/langgraph), designed for [LangGraph Studio](https://github.com/langchain-ai/langgraph-studio). ReAct agents are uncomplicated, prototypical agents that can be flexibly extended to many tools.
 
-![Graph view in LangGraph studio UI](./static/studio_ui.png)
+## 主要功能
 
-The core logic, defined in `src/react_agent/graph.py`, demonstrates a flexible ReAct agent that iteratively reasons about user queries and executes actions, showcasing the power of this approach for complex problem-solving tasks.
+- 支持 **本地模型** 和 **线上模型**
+- 支持通过 **IDA Pro MCP** 直接获取函数、反汇编、交叉引用和上下文
+- 支持通过 **ASM / listing / 导出文本** 作为输入材料进行还原
+- 支持按 **单函数** 或 **入口调用链** 两种模式工作
+- 支持在 `authorized_paths` / `source_files` 范围内安全读写文件
+- 提供本地 **Textual TUI** 作为默认使用界面
 
-## What it does
 
-The ReAct agent:
+## 安装
 
-1. Takes a user **query** as input
-2. Reasons about the query and decides on an action
-3. Executes the chosen action using available tools
-4. Observes the result of the action
-5. Repeats steps 2-4 until it can provide a final answer
+### 环境要求
 
-By default, it's set up with a basic set of tools, but can be easily extended with custom tools to suit various use cases.
+- Python `>=3.11,<4.0`
 
-## Getting Started
+### 安装依赖
 
-Assuming you have already [installed LangGraph Studio](https://github.com/langchain-ai/langgraph-studio?tab=readme-ov-file#download), to set up:
+项目根目录下提供了 `requirements.txt`，可以直接一键安装：
 
-1. Create a `.env` file.
-
-```bash
-cp .env.example .env
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+pip install -e .
 ```
 
-2. Define required API keys in your `.env` file.
+如果你已经有自己的 Python 环境，也可以只执行：
 
-The primary [search tool](./src/react_agent/tools.py) [^1] used is [Tavily](https://tavily.com/). Create an API key [here](https://app.tavily.com/sign-in).
-
-### Setup Model
-
-The defaults values for `model` are shown below:
-
-```yaml
-model: claude-sonnet-4-5-20250929
+```powershell
+pip install -r requirements.txt
+pip install -e .
 ```
 
-Follow the instructions below to get set up, or pick one of the additional options.
 
-#### Anthropic
+## 配置
 
-To use Anthropic's chat models:
+项目通过 `.env` 管理运行时配置。
 
-1. Sign up for an [Anthropic API key](https://console.anthropic.com/) if you haven't already.
-2. Once you have your API key, add it to your `.env` file:
+### 模型配置
 
+当前支持两类模型配置：
+
+- `LLM_PROFILE=openai`
+  - 使用线上模型或 OpenAI 兼容接口
+- `LLM_PROFILE=local`
+  - 使用本地模型
+
+示例：
+
+```dotenv
+LLM_PROFILE=local
+
+OPENAI_MODEL=openai/gpt-5.4
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_API_KEY=your-openai-key
+
+LOCAL_MODEL=openai/your-local-model
+LOCAL_BASE_URL=http://127.0.0.1:11434/v1
+LOCAL_API_KEY=ollama
 ```
-ANTHROPIC_API_KEY=your-api-key
+
+### MCP 配置
+
+如果使用 IDA Pro MCP，可在 `.env` 中配置：
+
+```dotenv
+MCP_ENABLED=true
+MCP_SERVER_NAME=ida-pro-mcp
+MCP_TRANSPORT=http
+MCP_URL=http://127.0.0.1:13337/mcp
 ```
-#### OpenAI
 
-To use OpenAI's chat models:
+如果不使用 MCP，也可以仅通过本地汇编文件、listing 或导出文本驱动 Agent。
 
-1. Sign up for an [OpenAI API key](https://platform.openai.com/signup).
-2. Once you have your API key, add it to your `.env` file:
+### 可选联网搜索
+
+如果需要联网搜索能力，可以配置：
+
+```dotenv
+TAVILY_API_KEY=your-tavily-key
 ```
-OPENAI_API_KEY=your-api-key
+
+
+## 启动方式
+
+默认使用 Textual TUI：
+
+```powershell
+python tui_app.py --inline
 ```
 
-3. Customize whatever you'd like in the code.
-4. Open the folder LangGraph Studio!
+常用快捷键：
 
-## How to customize
+- `Enter`：发送
+- `Ctrl+L`：清空当前 UI
+- `Ctrl+C`：退出
 
-1. **Add new tools**: Extend the agent's capabilities by adding new tools in [tools.py](./src/react_agent/tools.py). These can be any Python functions that perform specific tasks.
-2. **Select a different model**: We default to Anthropic's Claude 3 Sonnet. You can select a compatible chat model using `provider/model-name` via runtime context. Example: `openai/gpt-4-turbo-preview`.
-3. **Customize the prompt**: We provide a default system prompt in [prompts.py](./src/react_agent/prompts.py). You can easily update this via context in the studio.
 
-You can also quickly extend this template by:
+## 文件操作安全边界
 
-- Modifying the agent's reasoning process in [graph.py](./src/react_agent/graph.py).
-- Adjusting the ReAct loop or adding additional steps to the agent's decision-making process.
+Agent 当前具备文件工具，但文件读写改都限制在用户明确授权的范围内。
 
-## Development
+### `authorized_paths`
 
-While iterating on your graph, you can edit past state and rerun your app from past states to debug specific nodes. Local changes will be automatically applied via hot reload. Try adding an interrupt before the agent calls tools, updating the default system message in `src/react_agent/context.py` to take on a persona, or adding additional nodes and edges!
+表示用户明确授权 Agent 可操作的目录。
 
-Follow up requests will be appended to the same thread. You can create an entirely new thread, clearing previous history, using the `+` button in the top right.
+### `source_files`
 
-You can find the latest (under construction) docs on [LangGraph](https://github.com/langchain-ai/langgraph) here, including examples and other references. Using those guides can help you pick the right patterns to adapt here for your use case.
+表示用户明确授权 Agent 可操作的文件。
 
-LangGraph Studio also integrates with [LangSmith](https://smith.langchain.com/) for more in-depth tracing and collaboration with teammates.
+### 当前文件工具
 
-[^1]: https://python.langchain.com/docs/concepts/#tools
+- `list_directory`
+- `read_file`
+- `create_directory`
+- `write_file`
+- `replace_in_file`
+
+### 当前限制
+
+- 只在 `authorized_paths` / `source_files` 范围内暴露文件能力
+- 拦截部分敏感目录，例如：
+  - `.git`
+  - `.venv`
+  - `node_modules`
+  - `__pycache__`
+
+
+## 运行形态
+
+当前项目更适合作为一个 **本地逆向工作台 Agent** 使用：
+
+- TUI 负责本地交互
+- LangGraph 负责状态流转和节点编排
+- MCP / 文件 / 搜索工具负责外部能力接入
+
+当前会话在同一次 TUI 运行期间保留短期记忆，便于连续推进还原任务。
+
+
+## 项目中与使用最相关的文件
+
+- [tui_app.py](D:/workEnvironment/ai/Agent/C28Reverse-agent/tui_app.py)
+  - Textual 本地界面入口
+
+- [src/react_agent/graph.py](D:/workEnvironment/ai/Agent/C28Reverse-agent/src/react_agent/graph.py)
+  - LangGraph 主流程
+
+- [src/react_agent/context.py](D:/workEnvironment/ai/Agent/C28Reverse-agent/src/react_agent/context.py)
+  - 运行时模型、MCP 和环境配置
+
+- [src/react_agent/tools.py](D:/workEnvironment/ai/Agent/C28Reverse-agent/src/react_agent/tools.py)
+  - 搜索工具、MCP 工具、文件工具的运行时装配
+
+- [src/react_agent/file_tools.py](D:/workEnvironment/ai/Agent/C28Reverse-agent/src/react_agent/file_tools.py)
+  - 本地文件读写改工具及授权限制
+
+
+## 说明
+
+当前 README 只保留项目介绍、安装方式、基础配置和能力边界说明。  
+后续如果你给出完整业务流程，我可以再补对应的 **Mermaid 流程图**，把 Agent 的实际工作链路整理进去。
