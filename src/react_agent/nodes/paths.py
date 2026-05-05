@@ -7,17 +7,10 @@ from pathlib import Path
 from react_agent.state import State
 from react_agent.domain.paths import PathCandidate, PathValidationResult
 
-
+# 验证路径是否存在，并按类型放到对应的列表
 def validate_path_candidates(
     candidates: list[PathCandidate],
 ) -> PathValidationResult:
-    """Validate AI-extracted path candidates against the local filesystem.
-
-    AI 只能提供候选路径；这里才是真正的安全边界。
-    返回值会把存在的目录归入 authorized_paths，把存在的文件归入 source_files。
-    后续写文件工具只能使用 authorized_paths 中的 directory。
-    """
-
     result = PathValidationResult()
 
     for candidate in candidates:
@@ -60,13 +53,12 @@ def validate_path_candidates(
     return result
 
 
+# 验证候选路径
 def validate_paths_node(state: State) -> dict[str, Any]:
-    """Validate path candidates and derive trusted source files/directories."""
 
     result = validate_path_candidates(state.path_candidates)
 
-    # 普通 State 字段是覆盖式更新。这里不要用空列表清掉旧的可信路径；
-    # 只有本轮确实校验出新路径时才替换，否则保留上一轮已经验证过的路径。
+    # 保留之前的路径
     authorized_paths = result.authorized_paths or state.authorized_paths
     source_files = result.source_files or state.source_files
 

@@ -15,45 +15,31 @@ from react_agent.domain.intake import TaskIntake
 from react_agent.prompts.intake_prompt import TASK_INTAKE_PROMPT
 
 
-T = TypeVar("T")
-
-
+# 通过LLM从用户输出中分析任务类型、资源类型、用户目标、函数列表等所需必要信息
 async def extract_task_intake(
     model: BaseChatModel,
     user_input: str,
 ) -> TaskIntake:
-    """Extract task mode, source mode, paths, and targets from user input."""
 
     extractor = TASK_INTAKE_PROMPT | model.with_structured_output(TaskIntake)
     return await extractor.ainvoke({"user_input": user_input})
 
 
+# 更新字符状态，确保全局状态不被覆盖
 def _merge_mode(current: str, incoming: str) -> str:
-    """Keep the existing mode when the latest user input is ambiguous."""
-
     if incoming != "unknown":
         return incoming
     return current
 
-
+T = TypeVar("T")
+# 更新列表状态，确保全局状态不被覆盖，T是泛型
 def _merge_list(current: list[T], incoming: list[T]) -> list[T]:
-    """Use newly extracted list values only when the user actually provided them."""
-
     if incoming:
         return incoming
     return current
 
-
+# 合并所有状态，暂时不考虑删除之前的状态
 def merge_intake_with_state(state: State, intake: TaskIntake) -> dict[str, Any]:
-    """Merge latest intake facts without clearing trusted state from prior turns.
-
-    LangGraph checkpointers restore the previous State by thread_id, but normal
-    State fields still use last-write-wins semantics. That means returning
-    source_mode="unknown" or an empty list from this node would overwrite useful
-    facts collected in earlier turns. This merge keeps old values unless the
-    latest user message clearly supplies a replacement.
-    """
-
     task_mode = _merge_mode(state.task_mode, intake.task_mode)
     source_mode = _merge_mode(state.source_mode, intake.source_mode)
     function_names = _merge_list(state.function_names, intake.function_names)
@@ -76,18 +62,8 @@ def merge_intake_with_state(state: State, intake: TaskIntake) -> dict[str, Any]:
     }
 
 
+# Agent的预处理，判断是否可以进入ready状态进行还原环路操作
 def session_entry_node(state: State) -> dict[str, Any]:
-    """Decide which phase should handle the latest user input.
-
-    这个节点是每次 graph run 的真正入口。它不解析业务内容，只根据
-    上一次保存下来的 State 判断“这次输入应该补哪个环节”。
-
-    这样做的原因：
-    - thread_id 只能恢复 State，不能阻止节点覆盖 State。
-    - 如果每次都从 task_intake_node 开始，模式选择就会反复执行。
-    - 进入 blocked 后，resume 的输入应该回到缺失项对应的小节点。
-    """
-
     if state.session_phase == "new":
         return {"session_phase": "initializing"}
 
@@ -100,16 +76,13 @@ def session_entry_node(state: State) -> dict[str, Any]:
     return {"session_phase": "initializing"}
 
 
+# 做函数目标分析function_names/entry_points
 async def target_intake_node(
     state: State,
     runtime: Runtime[Context],
 ) -> dict[str, Any]:
-    """Extract only function targets from a follow-up user message.
 
-    当缺少函数名/入口点时，用户后续可能只输入 `main`。这类输入不应该重新
-    判断 source_mode，也不应该清空 MCP/路径等已确认状态。
-    """
-
+    # 没有用户输入直接阻塞
     user_input = latest_human_text(state)
     if not user_input.strip():
         return {
@@ -148,12 +121,11 @@ async def target_intake_node(
     }
 
 
+# 可操作路径是否存在检测
 async def path_intake_node(
     state: State,
     runtime: Runtime[Context],
 ) -> dict[str, Any]:
-    """Extract only local path candidates from a follow-up user message."""
-
     user_input = latest_human_text(state)
     if not user_input.strip():
         return {
@@ -161,7 +133,7 @@ async def path_intake_node(
             "needs_user_input": True,
             "blocking_reason": "缺少可操作目录或汇编文件路径。",
             "missing_requirements": ["asm_source"],
-            "last_blocking_node": "path_intake_node",
+            "last_blocking_node": "path_intake_node", # 循环当前节点，因为当前节点是维护必要信息的
         }
 
     model = load_chat_model(
@@ -190,11 +162,11 @@ async def path_intake_node(
         "missing_requirements": [],
     }
 
+# 明确用户需求，通过LLM分析用户需求，更新Agent运行时状态
 async def task_intake_node(
     state: State,
     runtime: Runtime[Context],
 ) -> dict[str, Any]:
-    """Understand the latest user request before deciding the execution path."""
 
     user_input = latest_human_text(state)
     if not user_input.strip():

@@ -6,6 +6,7 @@ from typing import Literal
 from react_agent.state import State
 
 
+# 获取用户最后一条用户信息
 def latest_human_text(state: State) -> str:
     """Return the latest human message text from LangGraph state."""
 
@@ -14,9 +15,8 @@ def latest_human_text(state: State) -> str:
             return get_message_text(message)
     return ""
 
-
+# 获取消息的文本内容
 def get_message_text(msg: BaseMessage) -> str:
-    """获取消息的文本内容."""
     content = msg.content
     if isinstance(content, str):
         return content
@@ -27,14 +27,11 @@ def get_message_text(msg: BaseMessage) -> str:
         return "".join(txts).strip()
 
 
+# 通过模型名加载模型
 def load_chat_model(
     fully_specified_name: str, base_url: str | None = None
 ) -> BaseChatModel:
-    """从名称加载模型.
 
-    Args:
-        fully_specified_name (str): String in the format 'provider/model'.
-    """
     provider, model = fully_specified_name.split("/", maxsplit=1)
     kwargs = {}
     if base_url:

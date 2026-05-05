@@ -19,22 +19,39 @@ from langchain_core.messages import AIMessage, AIMessageChunk
 from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Footer, Header, Input, RichLog, Static
+from textual.widgets import Footer, Header, Input, RichLog, Static, TextArea
 
 from react_agent import graph
 from react_agent.context import Context
 from react_agent.utils import get_message_text
 from langgraph.types import Command
 
-def _assistant_chunk_text(chunk: Any) -> str:
+def _assistant_chunk_text(chunk: Any, metadata: dict[str, Any] | None = None) -> str:
     """从 LangGraph 的流式消息事件中，只提取 Assistant 的文本内容。
 
     stream_mode="messages" 会流出多种消息，例如 AIMessageChunk、ToolMessage 等。
-    UI 聊天框只应该显示最终面向用户的 Assistant 文本，因此这里过滤掉工具消息。
+    UI 聊天框只应该显示最终面向用户的 Assistant 文本，因此这里过滤掉工具消息
+    和初始化节点里的结构化 LLM 输出。
     """
+    if metadata and metadata.get("langgraph_node") != "call_model":
+        return ""
+
     if isinstance(chunk, AIMessage | AIMessageChunk):
         return get_message_text(chunk)
     return ""
+
+
+def _short_error_text(error: Exception) -> str:
+    """Keep unexpected UI errors readable instead of rendering full tracebacks."""
+
+    text = str(error).strip()
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in reversed(lines):
+        if any(marker in line for marker in ("Error:", "Exception:", "AttributeError:", "ValueError:")):
+            return f"{error.__class__.__name__}: {line}"
+    if lines:
+        return f"{error.__class__.__name__}: {lines[-1]}"
+    return error.__class__.__name__
 
 
 class AgentTui(App[None]):
@@ -64,10 +81,9 @@ class AgentTui(App[None]):
     }
 
     #streaming {
-        height: auto;
+        height: 35%;
         max-height: 35%;
         border: solid $primary;
-        padding: 0 1;
         display: none;
     }
 
@@ -111,7 +127,14 @@ class AgentTui(App[None]):
         yield Header(show_clock=True)
         yield Static("Ready", id="status")
         yield RichLog(id="chat", wrap=True, markup=True, highlight=True)
-        yield Static("", id="streaming", markup=True)
+        yield TextArea(
+            "",
+            id="streaming",
+            read_only=True,
+            soft_wrap=True,
+            show_line_numbers=False,
+            show_cursor=False,
+        )
         with Vertical(id="input-row"):
             with Horizontal():
                 yield Input(placeholder="输入问题并按 Enter", id="prompt")
@@ -204,7 +227,8 @@ class AgentTui(App[None]):
 
                 elif mode == "messages":
                     chunk = payload[0] if isinstance(payload, tuple) else payload
-                    text = _assistant_chunk_text(chunk)
+                    metadata = payload[1] if isinstance(payload, tuple) and len(payload) > 1 else None
+                    text = _assistant_chunk_text(chunk, metadata)
                     if text:
                         self._assistant_buffer += text
                         self._render_streaming_answer()
@@ -221,9 +245,9 @@ class AgentTui(App[None]):
         except Exception as exc:
             # 出错时也写入 UI history 和 transcript，方便排查。
             self.awaiting_resume = False
-            error = f"{exc!r}"
+            error = _short_error_text(exc)
             self.history.append(("error", error))
-            self._append_transcript("Error", error)
+            self._append_transcript("Error", f"{exc!r}")
             self._hide_streaming_answer()
             self._render_chat()
             self.query_one("#status", Static).update("Error")
@@ -246,27 +270,45 @@ class AgentTui(App[None]):
         if not force and now - self._last_stream_render_at < 0.08 and new_chars < 96:
             return
 
+        start = self._last_stream_render_len
+        delta = self._assistant_buffer[start:]
+        if not delta and not force:
+            return
+
+        self._append_streaming_answer(delta, reset=start == 0)
         self._last_stream_render_at = now
         self._last_stream_render_len = len(self._assistant_buffer)
 
-        self._show_streaming_answer(self._assistant_buffer)
-
     def _show_streaming_answer(self, content: str) -> None:
-        """Update only the current streaming answer panel.
+        """Show a short placeholder before real streaming text arrives."""
 
-        RichLog 只负责已经完成的历史消息；当前回答放在独立 Static 中反复
-        update。这样长答案流式输出时不会清空和重绘整个历史区。
+        streaming = self.query_one("#streaming", TextArea)
+        streaming.display = True
+        streaming.load_text(f"Agent:\n{content}")
+        streaming.scroll_end(animate=False)
+
+    def _append_streaming_answer(self, content: str, *, reset: bool = False) -> None:
+        """Append new stream text without rebuilding the whole TextArea document.
+
+        之前用 load_text(full_answer) 每次重载全文，回答越长越卡，甚至看起来像
+        活动框停住。这里改成只追加本次新增片段，TextArea 自己负责滚动。
         """
 
-        streaming = self.query_one("#streaming", Static)
+        if not content and not reset:
+            return
+        streaming = self.query_one("#streaming", TextArea)
         streaming.display = True
-        streaming.update(f"[bold magenta]Agent:[/bold magenta] {content}")
+        if reset:
+            streaming.load_text("Agent:\n")
+        if content:
+            streaming.insert(content, streaming.document.end)
+        streaming.scroll_end(animate=False)
 
     def _hide_streaming_answer(self) -> None:
         """Hide the temporary streaming panel after the answer is finalized."""
 
-        streaming = self.query_one("#streaming", Static)
-        streaming.update("")
+        streaming = self.query_one("#streaming", TextArea)
+        streaming.load_text("")
         streaming.display = False
 
     def _render_chat(self) -> None:
@@ -287,11 +329,11 @@ class AgentTui(App[None]):
 
         for role, content in self.history:
             if role == "user":
-                chat.write(f"\n[bold cyan]You:[/bold cyan] {content}")
+                chat.write(f"\n[bold cyan]You:[/bold cyan] {content}", expand=True)
             elif role == "assistant":
-                chat.write(f"[bold magenta]Agent:[/bold magenta] {content}")
+                chat.write(f"[bold magenta]Agent:[/bold magenta]\n{content}", expand=True)
             elif role == "error":
-                chat.write(f"[bold red]Error:[/bold red] {content}")
+                chat.write(f"[bold red]Error:[/bold red] {content}", expand=True)
 
     def _create_transcript_path(self) -> Path:
         """创建本次 UI 会话的 Markdown 聊天记录文件。"""

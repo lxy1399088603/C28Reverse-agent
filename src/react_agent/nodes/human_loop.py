@@ -10,8 +10,8 @@ from langgraph.types import Command, interrupt
 from react_agent.state import State
 
 
+# 准备节点，当函数队列
 def execution_prepare_node(state: State) -> dict[str, Any]:
-    """Mark initialization complete once the minimum execution context exists."""
 
     if state.needs_user_input:
         return {}
@@ -34,10 +34,11 @@ def execution_prepare_node(state: State) -> dict[str, Any]:
         "missing_requirements": [],
     }
 
+
+# 人机环路阻塞
 def ask_missing_info_node(
     state: State,
 ) -> Command[Literal["session_entry_node"]]:
-    """Pause the graph and wait for the user to provide missing information."""
 
     reason = state.blocking_reason or "缺少继续执行所需的信息。"
     user_input = interrupt(
