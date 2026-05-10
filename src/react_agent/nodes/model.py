@@ -13,8 +13,9 @@ from react_agent.state import State
 from react_agent.utils import load_chat_model
 from react_agent.tools import load_runtime_tools
 
+
+# 结构化上下文信息
 def _format_initialization_context(state: State) -> str:
-    """Expose trusted initialization facts to the LLM."""
 
     return "\n".join(
         [
@@ -34,7 +35,6 @@ def _format_initialization_context(state: State) -> str:
 async def call_model(
     state: State, runtime: Runtime[Context]
 ) -> Dict[str, List[AIMessage]]:
-    """Call the LLM after initialization has prepared a task context."""
 
     # 绑定工具列表到模型
     tools = await load_runtime_tools(state, runtime.context)
@@ -49,7 +49,6 @@ async def call_model(
     )
     system_message = (
         f"{system_message}\n\n"
-        "## Initialization Context\n"
         f"{_format_initialization_context(state)}"
     )
 
