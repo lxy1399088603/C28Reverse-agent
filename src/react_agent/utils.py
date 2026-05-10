@@ -1,6 +1,6 @@
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, AIMessage
 from pathlib import Path
 from typing import Literal, Any
 from react_agent.state import State
@@ -13,6 +13,15 @@ def latest_human_text(state: State) -> str:
             return get_message_text(message)
     return ""
 
+
+def latest_ai_text(state: State) -> str:
+    for message in reversed(state.messages):
+        if isinstance(message, AIMessage):
+            content = message.content
+            if isinstance(content, str):
+                return content
+            return str(content)
+    return ""
 
 # 判断当前状态完整性
 def judge_CompleteState(state: State) -> dict[str, Any]:

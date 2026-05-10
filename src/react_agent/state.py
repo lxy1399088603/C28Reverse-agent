@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, Sequence
+from typing import Literal, Sequence, Set
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
@@ -61,6 +61,21 @@ class State(InputState):
     mcp_locked: bool = False    # 满足mcp检测后禁止修改
     targets_locked: bool = False # 满足目标函数信息后禁止修改
     last_blocking_node: str | None = None # 上一个阻塞节点
+
+    # 还原
+    stop : bool = False 
+    current_function: str | None = None
+    completed_functions: list[str] = field(default_factory=list)
+    failed_functions: list[str] = field(default_factory=list)
+
+    # 验证
+    verification_status: str | None = None
+    verification_reason: str | None = None
+    verification_retry_count: int = 0
+    verification_max_retries: int = 3
+    current_decompile_text: str | None = None
+    verification_evidence_gaps: list[str] = field(default_factory=list)
+    verification_retry_hint: str | None = None
 
     # 人机环路控制字段。7x24 场景下，只在真正缺少必要信息时使用。
     needs_user_input: bool = False # 需要用户补充信息

@@ -64,21 +64,48 @@ def route_after_targets(
 # 人机环路阻塞或跳转到执行任务节点
 def route_after_prepare(
     state: State,
-) -> Literal["ask_missing_info_node", "call_model_decompile"]:
+) -> Literal["ask_missing_info_node", "decompile_loop_router_node"]:
     if state.needs_user_input:
         return "ask_missing_info_node"
+    return "decompile_loop_router_node"
+
+
+# 路由到下一个还原函数或结束节点
+def route_decompile_loop(state: State) -> Literal["call_model_decompile", "decompile_finish_node"]:
+    if state.stop:
+        return "decompile_finish_node"
     return "call_model_decompile"
 
 
-# 路由工具调用节点还是直接结束推出
-def route_model_output(state: State) -> Literal["__end__", "tools"]:
-
+# 路由到工具列表或函数验证节点
+def route_model_output(
+    state: State,
+) -> Literal["function_verify_node", "decompile_tools"]:
     last_message = state.messages[-1]
+
     if not isinstance(last_message, AIMessage):
         raise ValueError(
-            f"没有收到LLM消息, goto {type(last_message).__name__}"
+            f"没有收到 LLM 消息, got {type(last_message).__name__}"
         )
 
-    if not last_message.tool_calls:
-        return "__end__"
-    return "tools"
+    if last_message.tool_calls:
+        return "decompile_tools"
+
+    return "function_verify_node"
+
+
+def route_after_function_verify(
+    state: State,
+) -> Literal["scan_callees_node", "verify_tools"]:
+    last_message = state.messages[-1]
+
+    if not isinstance(last_message, AIMessage):
+        raise ValueError(
+            f"没有收到 LLM 消息, got {type(last_message).__name__}"
+        )
+
+    if last_message.tool_calls:
+        return "verify_tools"
+
+    return "scan_callees_node"
+
