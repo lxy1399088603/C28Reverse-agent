@@ -135,7 +135,10 @@ async def function_verify_node(
 
 
 
-async def scan_callees_node(state: State) -> dict[str, Any]:
+async def scan_callees_node(
+    state: State,
+    runtime: Runtime[Context],
+) -> dict[str, Any]:
     current_function = (state.current_function or "").strip()
     if not current_function:
         raise ValueError("scan_callees_node requires state.current_function")
