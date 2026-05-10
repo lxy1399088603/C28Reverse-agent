@@ -21,6 +21,47 @@ The ReAct agent:
 
 By default, it's set up with a basic set of tools, but can be easily extended with custom tools to suit various use cases.
 
+## C28x Reverse Flow
+
+The current C28x reverse agent uses a workflow-controlled loop around LLM
+reasoning. The graph owns path validation, MCP readiness, function queue order,
+and loop termination. The model focuses on recovering and validating the current
+function with IDA Pro MCP and file tools.
+
+```mermaid
+flowchart TD
+    Start([User request]) --> Session[session_entry_node]
+    Session --> Intake[task_intake_node]
+    Intake --> Paths[validate_paths_node]
+    Paths --> MCP[check_mcp_node]
+    MCP --> Targets[validate_targets_node]
+    Targets --> Prepare[execution_prepare_node]
+    Prepare --> Loop[decompile_loop_router_node]
+
+    Loop -->|queue empty| Finish[decompile_finish_node]
+    Loop -->|pop queue head| Decompile[call_model_decompile]
+
+    Decompile -->|needs IDA evidence| DecompileTools[decompile_tools]
+    DecompileTools --> Decompile
+    Decompile -->|function draft ready| Verify[function_verify_node]
+
+    Verify -->|verify / repair / persist needs tools| VerifyTools[verify_tools]
+    VerifyTools --> Verify
+    Verify -->|function persisted| Scan[scan_callees_node]
+
+    Scan -->|scan LCR / FFC callees| Queue[head-insert new callees]
+    Queue --> Loop
+    Finish --> End([Done])
+```
+
+Important handling:
+
+- `function_queue` remains ordered because the call-chain recovery is depth-first.
+- `completed_functions` prevents already restored functions from being queued again.
+- `call_model_decompile` may use IDA Pro MCP to recover only `current_function`.
+- `function_verify_node` verifies, repairs, and persists the current function using MCP and file tools.
+- `scan_callees_node` reads current function call instructions and head-inserts newly discovered `LCR` / `FFC` callees.
+
 ## Getting Started
 
 Assuming you have already [installed LangGraph Studio](https://github.com/langchain-ai/langgraph-studio?tab=readme-ov-file#download), to set up:
