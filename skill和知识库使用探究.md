@@ -12,8 +12,8 @@
 你现在的 Agent 主干已经很接近“skill 驱动”的形态了。图结构在 [src/react_agent/graph.py](/D:/workEnvironment/ai/Agent/C28Reverse-agent/src/react_agent/graph.py) 里，核心是：
 
 1. 先做任务 intake、路径校验、目标函数校验。
-2. 再进入 `call_model -> tools -> call_model` 的 ReAct 主循环。
-3. `call_model` 会把当前状态拼进 system prompt，见 [src/react_agent/nodes/model.py](/D:/workEnvironment/ai/Agent/C28Reverse-agent/src/react_agent/nodes/model.py)。
+2. 再进入 `call_model_decompile -> tools -> call_model_decompile` 的 ReAct 主循环。
+3. `call_model_decompile` 会把当前状态拼进 system prompt，见 [src/react_agent/nodes/model.py](/D:/workEnvironment/ai/Agent/C28Reverse-agent/src/react_agent/nodes/model.py)。
 4. 总体行为约束在 [src/react_agent/prompts/system_prompt.py](/D:/workEnvironment/ai/Agent/C28Reverse-agent/src/react_agent/prompts/system_prompt.py)。
 
 而你给的 `ida2C28x` skill，本质上已经定义了完整的“恢复工作流”：

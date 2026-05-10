@@ -13,23 +13,23 @@ def route_from_session_entry(
     "target_intake_node",   # 模式检测
     "path_intake_node",     # 可操作路径检测
     "check_mcp_node",       # mcp开启检测
-    "call_model",           # 开始运行
+    "call_model_decompile",           # 开始运行
 ]:
     # 下一个恢复节点是否存在
     missing = set(state.missing_requirements)
 
-    # 交集判断
-    if missing & {"function_target", "function_names", "entry_points", "function_queue"}:
-        return "target_intake_node"  # 函数目标分析
-
     if missing & {"asm_source", "authorized_path", "path_candidates", "workspace_path"}:
         return "path_intake_node" # 可操作路径分析
-
+    
     if missing & {"mcp_connection", "mcp_tools"}:
         return "check_mcp_node" # mcp
+    
+    # 交集判断
+    if missing & {"function_target", "function_names"}:
+        return "target_intake_node"  # 函数目标分析
 
     if state.initialization_complete:
-        return "call_model"
+        return "call_model_decompile"
 
     return "task_intake_node" # 全局分析
 
@@ -51,6 +51,7 @@ def route_after_mcp(
         return "ask_missing_info_node"
     return "validate_targets_node"
 
+
 # 人机环路阻塞或跳转到执行前准备节点
 def route_after_targets(
     state: State,
@@ -63,10 +64,10 @@ def route_after_targets(
 # 人机环路阻塞或跳转到执行任务节点
 def route_after_prepare(
     state: State,
-) -> Literal["ask_missing_info_node", "call_model"]:
+) -> Literal["ask_missing_info_node", "call_model_decompile"]:
     if state.needs_user_input:
         return "ask_missing_info_node"
-    return "call_model"
+    return "call_model_decompile"
 
 
 # 路由工具调用节点还是直接结束推出

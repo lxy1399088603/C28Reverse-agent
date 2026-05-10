@@ -2,7 +2,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Any
 from react_agent.state import State
 
 
@@ -12,6 +12,27 @@ def latest_human_text(state: State) -> str:
         if getattr(message, "type", None) == "human":
             return get_message_text(message)
     return ""
+
+
+# 判断当前状态完整性
+def judge_CompleteState(state: State) -> dict[str, Any]:
+    result : dict[str, dict] = {}
+    if not state.path_candidates:
+        result["complete"] = False
+        result["missing_requirements"] = ["path_candidates"]
+        result["blocking_reason"] = "没有识别到可操作地址，请提供可操作文件或文件夹。"
+    elif not state.function_names:
+        result["complete"] = False
+        result["missing_requirements"] = ["function_target"]
+        result["blocking_reason"] = "没有识别到函数列表或入口函数1。"
+    elif state.task_mode == "unknown":
+        result["complete"] = False
+        result["missing_requirements"] = ["function_target"]
+        result["blocking_reason"] = "没有识别到函数列表或入口函数2。"
+    else:
+        result["complete"] = True
+    return result
+
 
 # 获取消息的文本内容
 def get_message_text(msg: BaseMessage) -> str:

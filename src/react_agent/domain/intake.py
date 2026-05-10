@@ -30,11 +30,10 @@ class TaskIntake(BaseModel):
         default="unknown",
         description="mcp 表示从 IDA/MCP 获取信息；asm_files 表示从本地汇编文件获取信息",
     )
-    # 用户目标
-    user_goal: str = Field(default="", description="用户任务目标摘要")
     # 函数列表
-    function_names: list[str] = Field(default_factory=list)
-    # 入口函数
-    entry_points: list[str] = Field(default_factory=list)
+    function_names: list[str] = Field(
+        default_factory=list,
+        description="用户提供的目标函数列表；包括单函数目标，也包括入口调用链的入口函数。",
+    )
     # 可操作路径列表
     path_candidates: list[PathCandidate] = Field(default_factory=list)

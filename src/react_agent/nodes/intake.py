@@ -12,16 +12,17 @@ from react_agent.utils import latest_human_text
 from react_agent.state import State
 from react_agent.utils import load_chat_model
 from react_agent.domain.intake import TaskIntake
-from react_agent.prompts.intake_prompt import TASK_INTAKE_PROMPT
+from react_agent.prompts.intake_prompt import *
 
 
 # 通过LLM从用户输出中分析任务类型、资源类型、用户目标、函数列表等所需必要信息
 async def extract_task_intake(
     model: BaseChatModel,
     user_input: str,
+    prompt: str,
 ) -> TaskIntake:
 
-    extractor = TASK_INTAKE_PROMPT | model.with_structured_output(TaskIntake)
+    extractor = prompt | model.with_structured_output(TaskIntake)
     return await extractor.ainvoke({"user_input": user_input})
 
 
@@ -43,15 +44,12 @@ def merge_intake_with_state(state: State, intake: TaskIntake) -> dict[str, Any]:
     task_mode = _merge_mode(state.task_mode, intake.task_mode)
     source_mode = _merge_mode(state.source_mode, intake.source_mode)
     function_names = _merge_list(state.function_names, intake.function_names)
-    entry_points = _merge_list(state.entry_points, intake.entry_points)
     path_candidates = _merge_list(state.path_candidates, intake.path_candidates)
 
-    return {
+    result = {
         "task_mode": task_mode,
         "source_mode": source_mode,
-        "user_goal": intake.user_goal or state.user_goal,
         "function_names": function_names,
-        "entry_points": entry_points,
         "path_candidates": path_candidates,
         "mcp_required": source_mode == "mcp",
         "session_phase": "initializing",
@@ -60,6 +58,8 @@ def merge_intake_with_state(state: State, intake: TaskIntake) -> dict[str, Any]:
         "blocking_reason": None,
         "missing_requirements": [],
     }
+    print(f"合并状态结果：{result}")
+    return result
 
 
 # Agent的预处理，判断是否可以进入ready状态进行还原环路操作
@@ -76,7 +76,7 @@ def session_entry_node(state: State) -> dict[str, Any]:
     return {"session_phase": "initializing"}
 
 
-# 做函数目标分析function_names/entry_points
+# 做函数目标分析function_names/function_names
 async def target_intake_node(
     state: State,
     runtime: Runtime[Context],
@@ -100,26 +100,29 @@ async def target_intake_node(
     )
 
     try:
-        intake = await extract_task_intake(model, user_input)
+        intake = await extract_task_intake(model, user_input, TARGET_INTAKE_PROMPT)
     except Exception as exc:
-        return {
+        result = {
             "session_phase": "blocked",
             "needs_user_input": True,
-            "blocking_reason": f"函数目标识别失败: {exc!r}",
+            "blocking_reason": f"没有识别到提供的函数列表及相关提示: {exc!r}",
             "missing_requirements": ["function_target"],
             "last_blocking_node": "target_intake_node",
         }
+        return result
 
-    return {
+    result = {
         "task_mode": _merge_mode(state.task_mode, intake.task_mode),
         "function_names": _merge_list(state.function_names, intake.function_names),
-        "entry_points": _merge_list(state.entry_points, intake.entry_points),
-        "user_goal": intake.user_goal or state.user_goal,
+        "source_mode": _merge_mode(state.source_mode, intake.source_mode),
         "session_phase": "initializing",
         "needs_user_input": False,
         "blocking_reason": None,
         "missing_requirements": [],
     }
+
+    print(f"处理目标分析后的全局状态：{result}")
+    return result
 
 
 # 可操作路径是否存在检测
@@ -144,25 +147,27 @@ async def path_intake_node(
     )
 
     try:
-        intake = await extract_task_intake(model, user_input)
+        intake = await extract_task_intake(model, user_input, PATH_INTAKE_PROMPT)
     except Exception as exc:
-        return {
+        result = {
             "session_phase": "blocked",
             "needs_user_input": True,
             "blocking_reason": f"路径识别失败: {exc!r}",
             "missing_requirements": ["asm_source"],
             "last_blocking_node": "path_intake_node",
         }
+        return result
 
-    return {
-        "source_mode": _merge_mode(state.source_mode, intake.source_mode),
+    result = {
         "path_candidates": _merge_list(state.path_candidates, intake.path_candidates),
-        "user_goal": intake.user_goal or state.user_goal,
         "session_phase": "initializing",
         "needs_user_input": False,
         "blocking_reason": None,
         "missing_requirements": [],
     }
+
+    print(f"处理路径获取后的全局状态：{result}")
+    return result
 
 # 明确用户需求，通过LLM分析用户需求，更新Agent运行时状态
 async def task_intake_node(
@@ -187,7 +192,7 @@ async def task_intake_node(
     )
 
     try:
-        intake = await extract_task_intake(model, user_input)
+        intake = await extract_task_intake(model, user_input, TASK_INTAKE_PROMPT)
     except Exception as exc:
         return {
             "session_phase": "blocked",

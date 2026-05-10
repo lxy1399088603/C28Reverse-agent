@@ -37,15 +37,13 @@ class State(InputState):
     # 第一层初始化：任务理解结果。
     task_mode: TaskMode = "unknown" # 任务模式
     source_mode: SourceMode = "unknown" # 资源获取类型
-    user_goal: str = "" # 用户目标
-    function_names: list[str] = field(default_factory=list) # 单函数分析列表
-    entry_points: list[str] = field(default_factory=list)   # 全局还原入口函数列表
+    function_names: list[str] = field(default_factory=list) # 用户提供的函数列表
     path_candidates: list[PathCandidate] = field(default_factory=list) # 可操作路径集合
 
     # 第二层初始化：程序校验后的事实。
     authorized_paths: list[PathCandidate] = field(default_factory=list) # 已认证路径
     source_files: list[PathCandidate] = field(default_factory=list)     # 已认证文件列表
-    mcp_required: bool = False      # mcp开启
+    mcp_required: bool = True      # mcp开启
     mcp_connect_status: bool = False    # mcp连接状态
     mcp_tool_names: list[str] = field(default_factory=list) # mcp工具名
 

@@ -13,9 +13,6 @@ from react_agent.state import State
 # 准备节点，当函数队列
 def execution_prepare_node(state: State) -> dict[str, Any]:
 
-    if state.needs_user_input:
-        return {}
-
     if not state.function_queue:
         return {
             "session_phase": "blocked",

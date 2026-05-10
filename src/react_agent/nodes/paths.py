@@ -6,6 +6,7 @@ from typing import Any
 from pathlib import Path
 from react_agent.state import State
 from react_agent.domain.paths import PathCandidate, PathValidationResult
+from react_agent.utils import judge_CompleteState
 
 # 验证路径是否存在，并按类型放到对应的列表
 def validate_path_candidates(
@@ -52,42 +53,61 @@ def validate_path_candidates(
 
     return result
 
-
 # 验证候选路径
 def validate_paths_node(state: State) -> dict[str, Any]:
 
-    result = validate_path_candidates(state.path_candidates)
+    if not state.path_candidates:
+        return {
+            "session_phase": "blocked",
+            "needs_user_input": True,
+            "blocking_reason": "没有识别出文件或目录。",
+            "missing_requirements": ["path_candidates"],
+            "last_blocking_node": "validate_paths_node",
+        }
+    path_map = validate_path_candidates(state.path_candidates)
 
     # 保留之前的路径
-    authorized_paths = result.authorized_paths or state.authorized_paths
-    source_files = result.source_files or state.source_files
+    authorized_paths = path_map.authorized_paths or state.authorized_paths
+    source_files = path_map.source_files or state.source_files
 
+    has_path = bool(authorized_paths or source_files)
+    if not has_path:
+        return {
+            "session_phase": "blocked",
+            "needs_user_input": True,
+            "blocking_reason": "提供的路径不存在，请重新提供。",
+            "missing_requirements": ["path_candidates"],
+            "last_blocking_node": "validate_paths_node",
+        }
+
+    complete_result = judge_CompleteState(state)
     update: dict[str, Any] = {
         "authorized_paths": authorized_paths,
         "source_files": source_files,
         "paths_locked": bool(authorized_paths or source_files),
-        "needs_user_input": False,
-        "blocking_reason": None,
-        "missing_requirements": [],
+        "needs_user_input": not complete_result["complete"],
+        "session_phase": "ready" if complete_result["complete"] else "initializing",
+        "blocking_reason": None if complete_result["complete"] else complete_result["blocking_reason"],
+        "missing_requirements": [] if complete_result["complete"] else complete_result["missing_requirements"],
     }
 
     # asm_files 模式必须有本地文件或目录作为信息来源。
-    if state.source_mode == "asm_files":
-        if not source_files and not authorized_paths:
-            update.update(
-                {
-                    "session_phase": "blocked",
-                    "needs_user_input": True,
-                    "blocking_reason": "asm_files 模式需要提供存在的 asm/lst/disasm 文件或目录。",
-                    "missing_requirements": ["asm_source"],
-                    "last_blocking_node": "validate_paths_node",
-                }
-            )
-        return update
+    # if state.source_mode == "asm_files":
+    #     if not source_files and not authorized_paths:
+    #         update.update(
+    #             {
+    #                 "session_phase": "blocked",
+    #                 "needs_user_input": True,
+    #                 "blocking_reason": "asm_files 模式需要提供存在的 asm/lst/disasm 文件或目录。",
+    #                 "missing_requirements": ["asm_source"],
+    #                 "last_blocking_node": "validate_paths_node",
+    #             }
+    #         )
+    #     return update
 
     # 如果用户没有明确来源，但提供了本地文件，则自动采用 asm_files 模式。
-    if state.source_mode == "unknown" and source_files:
-        update["source_mode"] = "asm_files"
-        update["source_locked"] = True
+    # if state.source_mode == "unknown" and source_files:
+    #     update["source_mode"] = "mcp"
+    #     update["source_locked"] = True
 
     return update

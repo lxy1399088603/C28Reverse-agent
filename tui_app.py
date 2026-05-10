@@ -30,7 +30,7 @@ from react_agent.utils import get_message_text
 def _assistant_chunk_text(chunk: Any, metadata: dict[str, Any] | None = None) -> str:
     """Return only assistant-facing text from streamed LangGraph events."""
 
-    if metadata and metadata.get("langgraph_node") != "call_model":
+    if metadata and metadata.get("langgraph_node") != "call_model_decompile":
         return ""
 
     if isinstance(chunk, AIMessage | AIMessageChunk):

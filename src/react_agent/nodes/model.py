@@ -21,7 +21,6 @@ def _format_initialization_context(state: State) -> str:
         [
             f"task_mode: {state.task_mode}",
             f"source_mode: {state.source_mode}",
-            f"user_goal: {state.user_goal}",
             f"function_queue: {state.function_queue}",
             f"authorized_paths: {[item.model_dump() for item in state.authorized_paths]}",
             f"source_files: {[item.model_dump() for item in state.source_files]}",
@@ -32,41 +31,41 @@ def _format_initialization_context(state: State) -> str:
     )
 
 
-async def call_model(
+async def call_model_decompile(
     state: State, runtime: Runtime[Context]
 ) -> Dict[str, List[AIMessage]]:
 
     # 绑定工具列表到模型
-    tools = await load_runtime_tools(state, runtime.context)
-    model = load_chat_model(
-        runtime.context.model,
-        base_url=runtime.context.base_url,
-        api_key=runtime.context.api_key,
-    ).bind_tools(tools)
+    # tools = await load_runtime_tools(state, runtime.context)
+    # model = load_chat_model(
+    #     runtime.context.model,
+    #     base_url=runtime.context.base_url,
+    #     api_key=runtime.context.api_key,
+    # ).bind_tools(tools)
 
-    system_message = runtime.context.system_prompt.format(
-        system_time=datetime.now(tz=UTC).isoformat()
-    )
-    system_message = (
-        f"{system_message}\n\n"
-        f"{_format_initialization_context(state)}"
-    )
+    # system_message = runtime.context.system_prompt.format(
+    #     system_time=datetime.now(tz=UTC).isoformat()
+    # )
+    # system_message = (
+    #     f"{system_message}\n\n"
+    #     f"{_format_initialization_context(state)}"
+    # )
 
-    response = cast(
-        AIMessage,
-        await model.ainvoke(
-            [{"role": "system", "content": system_message}, *state.messages]
-        ),
-    )
+    # response = cast(
+    #     AIMessage,
+    #     await model.ainvoke(
+    #         [{"role": "system", "content": system_message}, *state.messages]
+    #     ),
+    # )
 
-    if state.is_last_step and response.tool_calls:
-        return {
-            "messages": [
-                AIMessage(
-                    id=response.id,
-                    content="抱歉，我没有在指定步数内完成任务。",
-                )
-            ]
-        }
+    # if state.is_last_step and response.tool_calls:
+    #     return {
+    #         "messages": [
+    #             AIMessage(
+    #                 id=response.id,
+    #                 content="抱歉，我没有在指定步数内完成任务。",
+    #             )
+    #         ]
+    #     }
 
-    return {"messages": [response]}
+    # return {"messages": [response]}

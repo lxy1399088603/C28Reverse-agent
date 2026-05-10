@@ -1,6 +1,6 @@
-核心结论：**不要让 `call_model + prompt` 成为函数队列的真正“拥有者”**。在你的场景里，ReAct 适合负责“单函数内的证据收集、推理、工具调用、自检”，但**不适合负责全局调度真相**。未完成队列、已完成列表、去重集合、函数状态迁移，应该由 **LangGraph 的显式状态机和确定性节点** 管，不应交给模型在自由文本里维护。
+核心结论：**不要让 `call_model_decompile + prompt` 成为函数队列的真正“拥有者”**。在你的场景里，ReAct 适合负责“单函数内的证据收集、推理、工具调用、自检”，但**不适合负责全局调度真相**。未完成队列、已完成列表、去重集合、函数状态迁移，应该由 **LangGraph 的显式状态机和确定性节点** 管，不应交给模型在自由文本里维护。
 
-**为什么仅靠 `call_model` 不可靠**
+**为什么仅靠 `call_model_decompile` 不可靠**
 你现在的入口是 [src/react_agent/nodes/model.py](/D:/workEnvironment/ai/Agent/C28Reverse-agent/src/react_agent/nodes/model.py)，它把 system prompt 和当前 `State` 拼起来，然后进入 ReAct 循环。这个模式有两个天然问题：
 
 1. ReAct 擅长“局部决策”，不擅长“全局账本”  
@@ -24,7 +24,7 @@ ReAct 论文强调的是边想边做，用外部工具补证据，而不是维�
 - `seen_functions`
 - `function_status_map`
 
-2. `call_model` 只负责单函数闭环  
+2. `call_model_decompile` 只负责单函数闭环  
 包括：
 - 获取当前函数证据
 - 生成恢复结果
@@ -41,7 +41,7 @@ ReAct 论文强调的是边想边做，用外部工具补证据，而不是维�
 **推荐的主循环形态**
 不要是现在这种抽象的：
 
-`call_model -> tools -> call_model`
+`call_model_decompile -> tools -> call_model_decompile`
 
 而应该是更显式的调度循环：
 
@@ -192,12 +192,12 @@ ReAct 论文强调的是边想边做，用外部工具补证据，而不是维�
 - 内层某些节点才是 ReAct agent
 
 这和 LangGraph 官方一贯强调的 workflow/agent 组合思路一致：[LangGraph: Workflows and agents](https://docs.langchain.com/oss/python/langgraph/workflows-agents)  
-如果单函数恢复太复杂，还可以把它做成子图而不是单个 `call_model`。[LangGraph subgraphs](https://docs.langchain.com/oss/python/langgraph/use-subgraphs)
+如果单函数恢复太复杂，还可以把它做成子图而不是单个 `call_model_decompile`。[LangGraph subgraphs](https://docs.langchain.com/oss/python/langgraph/use-subgraphs)
 
 **面向你当前项目的最终建议**
 我建议你把当前架构认知改成这句话：
 
-> `call_model` 不是主循环控制器，它只是“当前函数恢复器”。
+> `call_model_decompile` 不是主循环控制器，它只是“当前函数恢复器”。
 
 真正的主循环应该由图和状态字段驱动。  
 如果要保证准确性，你至少要做到：
