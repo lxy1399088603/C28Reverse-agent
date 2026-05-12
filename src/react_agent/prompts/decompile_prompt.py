@@ -8,6 +8,10 @@ from react_agent.prompts.ida2c28x_rules import IDA2C28X_RULES
 from react_agent.state import State
 
 
+def _preview_items(items: list[str], limit: int = 5) -> list[str]:
+    return [item for item in items[:limit]]
+
+
 DECOMPILE_EQUIVALENCE_SUMMARY = """
 生成结果时主动满足以下验收方向，但最终状态由 function_verify_node 判断：
 
@@ -28,9 +32,12 @@ def format_decompile_state(state: State) -> str:
             f"task_mode: {state.task_mode}",
             f"source_mode: {state.source_mode}",
             f"current_function: {state.current_function}",
-            f"function_queue: {state.function_queue}",
-            f"completed_functions: {state.completed_functions}",
-            f"failed_functions: {state.failed_functions}",
+            f"function_queue_len: {len(state.function_queue)}",
+            f"function_queue_preview: {_preview_items(state.function_queue)}",
+            f"completed_functions_len: {len(state.completed_functions)}",
+            f"completed_functions_preview: {_preview_items(state.completed_functions)}",
+            f"failed_functions_len: {len(state.failed_functions)}",
+            f"failed_functions_preview: {_preview_items(state.failed_functions)}",
             f"authorized_paths: {[item.model_dump() for item in state.authorized_paths]}",
             f"source_files: {[item.model_dump() for item in state.source_files]}",
             f"mcp_required: {state.mcp_required}",
@@ -75,7 +82,7 @@ System time: {datetime.now(tz=UTC).isoformat()}
 你不能修改、重排、清空或决定 function_queue。
 你不能宣布某个函数已加入 completed_functions 或 failed_functions。
 你不能开始还原 current_function 以外的函数。
-你发现被调函数时，只能在输出中记录 Candidate Callees，后续由 scan_callees_node 处理。
+是否扩展 function_queue 由 scan_callees_node 使用 ida-pro-mcp 的 get_callee_name 决定，不由你的文本输出决定。
 
 ## ida-pro-mcp 工具调用策略
 
@@ -143,9 +150,6 @@ Assembly Mapping:
 
 Global/Peripheral Access:
 <全局变量、Gvar 候选、外设或 volatile 访问>
-
-Candidate Callees:
-<每行一个候选被调函数名；只写函数名本身，不要加反引号、解释、地址、括号或额外描述；没有则写 none>
 
 Unresolved Evidence Gaps:
 <未确认点；没有则写 none>

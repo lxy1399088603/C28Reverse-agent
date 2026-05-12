@@ -28,6 +28,10 @@ def _entry_function_name(state: State) -> str:
     return current or "recovered"
 
 
+def _preview_items(items: list[str], limit: int = 5) -> list[str]:
+    return [item for item in items[:limit]]
+
+
 def format_verification_state(state: State) -> str:
     """格式化当前验证阶段需要感知的 workflow 状态。"""
 
@@ -37,9 +41,12 @@ def format_verification_state(state: State) -> str:
             f"source_mode: {state.source_mode}",
             f"current_function: {state.current_function}",
             f"entry_function: {_entry_function_name(state)}",
-            f"function_queue: {state.function_queue}",
-            f"completed_functions: {state.completed_functions}",
-            f"failed_functions: {state.failed_functions}",
+            f"function_queue_len: {len(state.function_queue)}",
+            f"function_queue_preview: {_preview_items(state.function_queue)}",
+            f"completed_functions_len: {len(state.completed_functions)}",
+            f"completed_functions_preview: {_preview_items(state.completed_functions)}",
+            f"failed_functions_len: {len(state.failed_functions)}",
+            f"failed_functions_preview: {_preview_items(state.failed_functions)}",
             f"verification_retry_count: {_safe_value(state, 'verification_retry_count', 0)}",
             f"verification_max_retries: {_safe_value(state, 'verification_max_retries', 3)}",
             f"mcp_required: {state.mcp_required}",
@@ -243,8 +250,6 @@ Verification Summary:
 <简短说明为什么当前落盘代码已经与汇编足够一致>
 Evidence Gaps:
 - <缺口 1；如果没有则写 none>
-Candidate Callees:
-- <每行一个被调函数名；只写函数名本身，不要加反引号、解释、地址、括号或额外描述；如果没有则写 none>
 
 状态选择规则：
 1. `persisted`：当前函数逻辑已经足够贴近汇编，并且已经写入文件。

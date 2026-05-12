@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, Sequence, Set
+from typing import Literal, Sequence
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
@@ -65,6 +65,7 @@ class State(InputState):
     # 还原
     stop : bool = False 
     current_function: str | None = None
+    current_round_start_message_id: str | None = None
     completed_functions: list[str] = field(default_factory=list)
     failed_functions: list[str] = field(default_factory=list)
 
@@ -81,3 +82,6 @@ class State(InputState):
     needs_user_input: bool = False # 需要用户补充信息
     blocking_reason: str | None = None # 阻塞提示信息
     missing_requirements: list[str] = field(default_factory=list) # 下一个恢复节点
+
+    # 安全
+    max_chain_depth : int = 64 # 最大递归深度

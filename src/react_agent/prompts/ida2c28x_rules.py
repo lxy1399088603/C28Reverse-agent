@@ -65,8 +65,7 @@ IDA2C28X_RULES = """
 2. Prototype Notes：参数、返回值、调用约定和证据来源。
 3. Assembly Mapping：关键汇编块到 C 逻辑的对应关系。
 4. Global/Peripheral Access：全局变量、外设、volatile 访问说明。
-5. Candidate Callees：当前函数发现的被调函数候选名称。
-6. Unresolved Evidence Gaps：仍未确认的证据缺口。
+5. Unresolved Evidence Gaps：仍未确认的证据缺口。
 
 如果证据不足，标记为 partial，不要伪装为完全等价。
 """
