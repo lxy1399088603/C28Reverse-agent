@@ -42,7 +42,7 @@ def _merge_list(current: list[T], incoming: list[T]) -> list[T]:
 # 合并所有状态，暂时不考虑删除之前的状态
 def merge_intake_with_state(state: State, intake: TaskIntake) -> dict[str, Any]:
     task_mode = _merge_mode(state.task_mode, intake.task_mode)
-    source_mode = _merge_mode(state.source_mode, intake.source_mode)
+    source_mode = "mcp"
     function_names = _merge_list(state.function_names, intake.function_names)
     path_candidates = _merge_list(state.path_candidates, intake.path_candidates)
 
@@ -51,7 +51,7 @@ def merge_intake_with_state(state: State, intake: TaskIntake) -> dict[str, Any]:
         "source_mode": source_mode,
         "function_names": function_names,
         "path_candidates": path_candidates,
-        "mcp_required": source_mode == "mcp",
+        "mcp_required": True,
         "session_phase": "initializing",
         "source_locked": source_mode != "unknown" or state.source_locked,
         "needs_user_input": False,
@@ -114,7 +114,8 @@ async def target_intake_node(
     result = {
         "task_mode": _merge_mode(state.task_mode, intake.task_mode),
         "function_names": _merge_list(state.function_names, intake.function_names),
-        "source_mode": _merge_mode(state.source_mode, intake.source_mode),
+        "source_mode": "mcp",
+        "mcp_required": True,
         "session_phase": "initializing",
         "needs_user_input": False,
         "blocking_reason": None,

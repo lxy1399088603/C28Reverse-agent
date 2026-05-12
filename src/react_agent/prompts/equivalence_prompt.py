@@ -244,7 +244,7 @@ Verification Summary:
 Evidence Gaps:
 - <缺口 1；如果没有则写 none>
 Candidate Callees:
-- <被调函数名；如果没有则写 none>
+- <每行一个被调函数名；只写函数名本身，不要加反引号、解释、地址、括号或额外描述；如果没有则写 none>
 
 状态选择规则：
 1. `persisted`：当前函数逻辑已经足够贴近汇编，并且已经写入文件。

@@ -75,7 +75,7 @@ System time: {datetime.now(tz=UTC).isoformat()}
 你不能修改、重排、清空或决定 function_queue。
 你不能宣布某个函数已加入 completed_functions 或 failed_functions。
 你不能开始还原 current_function 以外的函数。
-你发现被调函数时，只能在输出中记录 Candidate Callees，后续由 scan_callees_node 和 update_function_queue_node 处理。
+你发现被调函数时，只能在输出中记录 Candidate Callees，后续由 scan_callees_node 处理。
 
 ## ida-pro-mcp 工具调用策略
 
@@ -145,7 +145,7 @@ Global/Peripheral Access:
 <全局变量、Gvar 候选、外设或 volatile 访问>
 
 Candidate Callees:
-<只列出候选被调函数名，不要维护队列>
+<每行一个候选被调函数名；只写函数名本身，不要加反引号、解释、地址、括号或额外描述；没有则写 none>
 
 Unresolved Evidence Gaps:
 <未确认点；没有则写 none>

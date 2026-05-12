@@ -14,8 +14,83 @@ from react_agent.tools import load_runtime_tools
 from react_agent.utils import get_message_text, latest_ai_text, load_chat_model
 
 
+def _extract_candidate_callees_from_report(report_text: str) -> list[str]:
+    """Parse plain callee names from the model's Candidate Callees section."""
+
+    if not report_text.strip():
+        return []
+
+    match = re.search(
+        r"Candidate Callees:\s*(.*?)(?:\n[A-Z][A-Za-z/ _-]*:\s*|\Z)",
+        report_text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if match is None:
+        return []
+
+    callees: list[str] = []
+    seen: set[str] = set()
+    for raw_line in match.group(1).splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("-"):
+            line = line[1:].strip()
+        if not line or line.lower() == "none":
+            continue
+
+        symbol_match = re.match(r"`?([A-Za-z_.$?@][\w.$?@]*)`?$", line)
+        if symbol_match is None:
+            continue
+
+        callee = symbol_match.group(1)
+        if callee in seen:
+            continue
+        seen.add(callee)
+        callees.append(callee)
+
+    return callees
 
 
+def _merge_discovered_callees(
+    current_function: str,
+    completed_functions: list[str],
+    queued_functions: list[str],
+    *callee_groups: list[str],
+) -> list[str]:
+    """Depth-first merge for newly discovered callees and the remaining queue."""
+
+    discovered_seen: set[str] = set()
+    discovered_callees: list[str] = []
+
+    for group in callee_groups:
+        for raw_name in group:
+            callee = raw_name.strip()
+            if not callee:
+                continue
+            if callee == current_function:
+                continue
+            if callee in completed_functions:
+                continue
+            if callee in discovered_seen:
+                continue
+            discovered_seen.add(callee)
+            discovered_callees.append(callee)
+
+    remaining_queue = []
+    for name in queued_functions:
+        function_name = name.strip()
+        if not function_name:
+            continue
+        if function_name == current_function:
+            continue
+        if function_name in completed_functions:
+            continue
+        if function_name in discovered_seen:
+            continue
+        remaining_queue.append(function_name)
+
+    return discovered_callees + remaining_queue
 
 def decompile_loop_router_node(state: State) -> dict[str, Any]:
     if not state.function_queue:
@@ -189,8 +264,7 @@ async def scan_callees_node(
         if asm_text.strip():
             break
 
-    discovered_callees: list[str] = []
-    discovered_seen: set[str] = set()
+    discovered_from_asm: list[str] = []
 
     call_pattern = re.compile(
         r"\b(?:"
@@ -210,36 +284,22 @@ async def scan_callees_node(
         if callee == current_function:
             continue
 
-        if callee in completed_functions:
-            continue
+        discovered_from_asm.append(callee)
 
-        if callee in discovered_seen:
-            continue
+    discovered_from_report = _extract_candidate_callees_from_report(
+        state.current_decompile_text or latest_ai_text(state)
+    )
 
-        discovered_seen.add(callee)
-        discovered_callees.append(callee)
-
-    remaining_queue = []
-    for name in state.function_queue:
-        function_name = name.strip()
-        if not function_name:
-            continue
-
-        if function_name == current_function:
-            continue
-
-        if function_name in completed_functions:
-            continue
-
-        if function_name in discovered_seen:
-            continue
-
-        remaining_queue.append(function_name)
-
-    updated_queue = discovered_callees + remaining_queue
+    updated_queue = _merge_discovered_callees(
+        current_function,
+        completed_functions,
+        state.function_queue,
+        discovered_from_asm,
+        discovered_from_report,
+    )
 
     evidence_gaps = list(state.verification_evidence_gaps)
-    if not asm_text.strip():
+    if not asm_text.strip() and not discovered_from_report:
         reason = "scan_callees_node 未能通过 MCP 获取当前函数反汇编"
         if last_error is not None:
             reason = f"{reason}: {last_error}"
