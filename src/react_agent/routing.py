@@ -13,7 +13,7 @@ def route_from_session_entry(
     "target_intake_node",   # 模式检测
     "path_intake_node",     # 可操作路径检测
     "check_mcp_node",       # mcp开启检测
-    "call_model_decompile",           # 开始运行
+    "decompile_loop_router_node",     # 进入还原主循环
 ]:
     # 下一个恢复节点是否存在
     missing = set(state.missing_requirements)
@@ -29,7 +29,7 @@ def route_from_session_entry(
         return "target_intake_node"  # 函数目标分析
 
     if state.initialization_complete:
-        return "call_model_decompile"
+        return "decompile_loop_router_node"
 
     return "task_intake_node" # 全局分析
 
@@ -108,4 +108,3 @@ def route_after_function_verify(
         return "verify_tools"
 
     return "scan_callees_node"
-

@@ -83,6 +83,7 @@ System time: {datetime.now(tz=UTC).isoformat()}
 你不能宣布某个函数已加入 completed_functions 或 failed_functions。
 你不能开始还原 current_function 以外的函数。
 是否扩展 function_queue 由 scan_callees_node 使用 ida-pro-mcp 的 get_callee_name 决定，不由你的文本输出决定。
+不要把这些 workflow 边界当成终止整个调用链任务的理由。当前函数完成后，workflow 会自动决定是否继续和切换到哪个函数。
 
 ## ida-pro-mcp 工具调用策略
 
@@ -99,6 +100,7 @@ System time: {datetime.now(tz=UTC).isoformat()}
 5. IDA decompile 只能作为参考，不能替代汇编证据。
 6. 不要为同一问题无限重复调用相同工具；如果 ida-pro-mcp 无法提供更多信息，记录证据缺口并输出 partial。
 7. 当证据已经足够生成当前函数结果时，停止 tool call，直接输出结果。
+8. 不要为了推动后续调用链而在文本中维护 callee 队列；direct callee 只作为当前函数证据，真正的队列扩展由 scan_callees_node 处理。
 
 ## 内部分析策略
 

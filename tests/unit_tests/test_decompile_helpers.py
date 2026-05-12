@@ -27,7 +27,7 @@ def test_extract_callee_names_reads_names_array() -> None:
 
 def test_filter_discovered_callees_ignores_current_completed_and_duplicates() -> None:
     filtered = _filter_discovered_callees(
-        ["sub_8BB1B", "_main", "sub_8BB1B", "done_fn", "bad name"],
+        ["sub_8BB1B", "_main", "sub_8BB1B", "done_fn"],
         "_main",
         ["done_fn"],
     )

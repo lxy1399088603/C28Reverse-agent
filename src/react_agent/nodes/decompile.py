@@ -79,23 +79,6 @@ def _remove_current_round_messages(state: State) -> list[RemoveMessage]:
     return removals
 
 
-def _is_symbol_name(name: str) -> bool:
-    if not name:
-        return False
-
-    allowed_punct = {"_", ".", "$", "?", "@"}
-    first = name[0]
-    if not (first.isalpha() or first in allowed_punct):
-        return False
-
-    for char in name[1:]:
-        if char.isalnum() or char in allowed_punct:
-            continue
-        return False
-
-    return True
-
-
 def _extract_callee_names(raw_result: Any) -> list[str]:
     """Read direct callee names from ida-pro-mcp get_callee_name JSON output."""
 
@@ -128,14 +111,28 @@ def _filter_discovered_callees(
             continue
         if name in completed:
             continue
-        if not _is_symbol_name(name):
-            continue
         if name in seen:
             continue
         seen.add(name)
         filtered.append(name)
 
     return filtered
+
+
+def _find_tool_by_name(tools: list[Any], tool_name: str) -> Any | None:
+    """Find a runtime tool by exact name first, then by stable suffix."""
+
+    for tool in tools:
+        if getattr(tool, "name", None) == tool_name:
+            return tool
+
+    suffix = f".{tool_name}"
+    for tool in tools:
+        candidate = str(getattr(tool, "name", "") or "")
+        if candidate.endswith(suffix) or candidate.endswith(tool_name):
+            return tool
+
+    return None
 
 
 def _merge_discovered_callees(
@@ -320,11 +317,9 @@ async def scan_callees_node(
         completed_functions.append(current_function)
 
     tools = await load_runtime_tools(state, runtime.context)
-    tool_by_name = {tool.name: tool for tool in tools}
-
     discovered_from_mcp: list[str] = []
     evidence_gaps = list(state.verification_evidence_gaps)
-    callee_tool = tool_by_name.get("get_callee_name")
+    callee_tool = _find_tool_by_name(tools, "get_callee_name")
 
     if callee_tool is None:
         evidence_gaps.append(
