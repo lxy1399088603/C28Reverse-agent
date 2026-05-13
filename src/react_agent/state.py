@@ -84,4 +84,4 @@ class State(InputState):
     missing_requirements: list[str] = field(default_factory=list) # 下一个恢复节点
 
     # 安全
-    max_chain_depth : int = 64 # 最大递归深度
+    max_chain_depth : int = 20 # 最大递归深度

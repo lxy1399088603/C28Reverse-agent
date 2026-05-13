@@ -25,7 +25,6 @@ DECOMPILE_EQUIVALENCE_SUMMARY = """
 
 
 def format_decompile_state(state: State) -> str:
-    """Format workflow-owned state for the decompile prompt."""
 
     return "\n".join(
         [
@@ -51,7 +50,6 @@ def build_decompile_system_prompt(
     state: State,
     base_system_prompt: str,
 ) -> str:
-    """Build the system prompt for one ReAct step of current_function."""
 
     return f"""
 {base_system_prompt}

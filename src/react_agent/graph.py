@@ -37,9 +37,10 @@ builder.add_node("execution_prepare_node", execution_prepare_node)
 
 # 还原主循环
 # 判断队列中是否有任务路由
-builder.add_node("decompile_loop_router_node", decompile_loop_router_node)
+builder.add_node("decompile_loop_node", decompile_loop_node)
 # 单函数还原节点
 builder.add_node("call_model_decompile", call_model_decompile)
+builder.add_node("decompile_fail_node", decompile_fail_node)
 # 函数验收落盘节点
 builder.add_node("function_verify_node", function_verify_node)
 # 扫描子函数节点，并更新队列
@@ -64,12 +65,13 @@ builder.add_conditional_edges("validate_targets_node", route_after_targets)
 builder.add_conditional_edges("execution_prepare_node", route_after_prepare)
 
 # 还原流程
-builder.add_conditional_edges("decompile_loop_router_node", route_decompile_loop)
+builder.add_conditional_edges("decompile_loop_node", route_decompile_loop)
 builder.add_conditional_edges("call_model_decompile", route_model_output)
+builder.add_edge("decompile_fail_node", "decompile_loop_node")
 builder.add_edge("decompile_tools","call_model_decompile")
 builder.add_conditional_edges("function_verify_node",route_after_function_verify)
 builder.add_edge("verify_tools","function_verify_node")
-builder.add_edge("scan_callees_node", "decompile_loop_router_node")
+builder.add_edge("scan_callees_node", "decompile_loop_node")
 builder.add_edge("decompile_finish_node","__end__")
 
 graph = builder.compile(name="C28x Reverse Agent", checkpointer=InMemorySaver())

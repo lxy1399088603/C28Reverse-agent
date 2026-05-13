@@ -49,7 +49,6 @@ def build_mcp_connections(context: Context) -> dict[str, dict[str, Any]]:
                 "url": context.mcp_url,
             }
         }
-
     return {}
 
 
@@ -65,13 +64,6 @@ def create_mcp_client(context: Context) -> MultiServerMCPClient | None:
 
 # 加载mcp工具列表
 async def load_mcp_tools(context: Context) -> list[BaseTool]:
-    """Load tools exposed by configured MCP servers.
-
-    这个函数会被两个地方调用：
-    1. check_mcp_node：检测 MCP 是否可用，并记录工具名。
-    2. load_runtime_tools：把 MCP 工具合并进模型和 ToolNode 使用的工具列表。
-    """
-
     client = create_mcp_client(context)
     if client is None:
         return []

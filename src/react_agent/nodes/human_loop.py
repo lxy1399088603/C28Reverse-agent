@@ -53,6 +53,7 @@ def ask_missing_info_node(
             "messages": [HumanMessage(content=str(user_input))],
             "needs_user_input": False,
             "blocking_reason": None,
+            "missing_requirements": []
         },
         goto="session_entry_node",
     )

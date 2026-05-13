@@ -13,11 +13,15 @@ def route_from_session_entry(
     "target_intake_node",   # 模式检测
     "path_intake_node",     # 可操作路径检测
     "check_mcp_node",       # mcp开启检测
-    "decompile_loop_router_node",     # 进入还原主循环
+    "decompile_loop_node",     # 进入还原主循环
 ]:
     # 下一个恢复节点是否存在
     missing = set(state.missing_requirements)
 
+    # 全局任务描述缺失，需要重新做完整意图分析
+    if missing & {"user_task", "task_intake"}:
+        return "task_intake_node"
+    
     if missing & {"asm_source", "authorized_path", "path_candidates", "workspace_path"}:
         return "path_intake_node" # 可操作路径分析
     
@@ -29,7 +33,7 @@ def route_from_session_entry(
         return "target_intake_node"  # 函数目标分析
 
     if state.initialization_complete:
-        return "decompile_loop_router_node"
+        return "decompile_loop_node"
 
     return "task_intake_node" # 全局分析
 
@@ -64,10 +68,10 @@ def route_after_targets(
 # 人机环路阻塞或跳转到执行任务节点
 def route_after_prepare(
     state: State,
-) -> Literal["ask_missing_info_node", "decompile_loop_router_node"]:
+) -> Literal["ask_missing_info_node", "decompile_loop_node"]:
     if state.needs_user_input:
         return "ask_missing_info_node"
-    return "decompile_loop_router_node"
+    return "decompile_loop_node"
 
 
 # 路由到下一个还原函数或结束节点
@@ -80,7 +84,11 @@ def route_decompile_loop(state: State) -> Literal["call_model_decompile", "decom
 # 路由到工具列表或函数验证节点
 def route_model_output(
     state: State,
-) -> Literal["function_verify_node", "decompile_tools"]:
+) -> Literal["function_verify_node", "decompile_tools", "decompile_fail_node"]:
+    
+    if state.verification_status == "failed":
+        return "decompile_fail_node"
+
     last_message = state.messages[-1]
 
     if not isinstance(last_message, AIMessage):
@@ -94,9 +102,11 @@ def route_model_output(
     return "function_verify_node"
 
 
+# 路由到工具列表或下一个节点
 def route_after_function_verify(
     state: State,
-) -> Literal["scan_callees_node", "verify_tools"]:
+) -> Literal["scan_callees_node", "verify_tools", 
+             "call_model_decompile", "decompile_fail_node"]:
     last_message = state.messages[-1]
 
     if not isinstance(last_message, AIMessage):
@@ -104,7 +114,18 @@ def route_after_function_verify(
             f"没有收到 LLM 消息, got {type(last_message).__name__}"
         )
 
+    # 优先级1：还有 tool call 要执行
     if last_message.tool_calls:
         return "verify_tools"
 
+    # 优先级2：根据解析出的 verification_status 路由
+    status = state.verification_status
+    
+    if status == "failed":
+        return "decompile_fail_node"
+    
+    if status == "need_more_evidence":
+        return "call_model_decompile"
+    
+    # verified（包括 partial）→ 成功，扫描被调函数
     return "scan_callees_node"
